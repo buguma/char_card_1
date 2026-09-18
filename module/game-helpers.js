@@ -499,6 +499,7 @@ function displayNpcs(location) {
     container.innerHTML = '';
 
     if (npcsAtLocation.length === 0) {
+        if (window.GameSceneBridge) GameSceneBridge.publishNpcs(location, []);
         return;
     }
 
@@ -570,6 +571,8 @@ function displayNpcs(location) {
         
         container.appendChild(portrait);
     });
+    // Publish the exact existing draw; projecting 3D must never draw RNG again.
+    if (window.GameSceneBridge) GameSceneBridge.publishNpcs(location, npcsAtLocation.map(npc => npc.id));
 }
 
 // 立绘像素检测的离屏canvas缓存：hover会高频触发检测，避免每帧重画整图
@@ -1055,6 +1058,7 @@ function switchScene(sceneName) {
     }
     
     updateSLGReturnButton();
+    if (window.GameSceneBridge) GameSceneBridge.notify('switch-scene');
 }
 
 // 显示地点信息弹窗

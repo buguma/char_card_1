@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "01217f8d177daa0fed922daeb31fa2f24c1013a2",
+  "sourceContract": ["index.html:importSave/exportSave/window.onload", "module/storage-service.js:buildSavePayload/importSaveFromJson", "module/game-config.js:defaultGameData"],
+  "format": "game-json-export",
+  "entry": "json-import",
+  "bootstrap": {"entry":"index.html?intent=loadSave&saveId=scene3d-fixture", "globalConfigFixture":"config/fake-api.json", "seed":12345, "businessTime":"2026-01-01T00:00:00Z"},
+  "responseFixture":"responses/action-stream.json",
+  "knownNetworkAssetFixture":"network/known-assets.json",
+  "visualResourceLimit":"Known remote Gal CSS background is fulfilled from a fixed synthetic local placeholder; not original artwork or production offline verification.",
+  "redaction":"全部合成剧情/名称/历史及假key，不读取用户存储；稀疏旧版gameData由原mergeWithDefaults补齐。",
+  "steps":["新BrowserContext中通过旧localStorage槽位迁移启动真实index", "使用原importSave文件选择器导入", "检查地点/模式/人物/数值/历史", "走原exportSave并捕获最终下载JSON", "在另一全新context通过文件选择器再次导入并比对"],
+  "ignoreDiffPaths": [],
+  "fixtures": [
+    {"id":"map","payloadFile":"saves/map.json","payloadSha256":"5d65866e042052aec326e8fdff518f788704928b22ae8f109a12a08498b3999b","expected":{"GameMode":0,"userLocation":"tianshanpai","logicalPage":"map","actionPoints":3,"currentWeek":2}},
+    {"id":"library","payloadFile":"saves/library.json","payloadSha256":"cbed94ed14d8e00bc3410ed70d649f2860421d172a6cb80bfa1f8c69703f43e4","expected":{"GameMode":0,"userLocation":"cangjingge","logicalPage":"cangjingge","actionPoints":3,"currentWeek":2}},
+    {"id":"gal","payloadFile":"saves/gal.json","payloadSha256":"6f9063bff919786868bdf34923a36e9023a46225b4da1cd821deea75e76941fd","expected":{"GameMode":1,"userLocation":"tianshanpai","logicalPage":"map","actionPoints":3,"currentWeek":2}},
+    {"id":"special-event","payloadFile":"saves/special-event.json","payloadSha256":"22e284c7d05ed6ec420b8f80a6bd22c8bff33c3dfdd34566cf43e7269355ab02","expected":{"GameMode":1,"userLocation":"tianshanpai","logicalPage":"map","actionPoints":3,"currentWeek":4,"inputEnable":0,"currentSpecialEvent":"Apprenticeship_Storyline_1"}},
+    {"id":"crowded","payloadFile":"saves/crowded.json","payloadSha256":"f739fdd3f4394fcd9e7ea11fab46a6a73c97f01c6a7287f76d3cf821af358f2b","expected":{"GameMode":0,"userLocation":"cangjingge","logicalPage":"cangjingge","actionPoints":3,"currentWeek":2}}
+  ]
+}

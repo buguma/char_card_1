@@ -1,0 +1,1 @@
+{"status":200,"headers":{"Content-Type":"text/event-stream"},"steps":[{"body":"data: {\"choices\":[{\"delta\":{\"content\":\"<MAIN_TEXT>合成中断第一段，等待用户取消。\"}}]}\n\n"}],"terminal":"await-abort","expected":{"requestCount":1,"commitCount":0}}

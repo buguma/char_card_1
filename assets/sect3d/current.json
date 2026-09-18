@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "buildId": "integration-014",
+  "bridgeProtocol": {
+    "min": 1,
+    "max": 1
+  },
+  "manifest": "integration-014/manifest.json",
+  "manifestSha256": "63d20a89ee28509c5ca907c055478b92dc2458fe4530e6c2cbb2884013f8226f"
+}

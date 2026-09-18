@@ -510,7 +510,8 @@ body.ui-style-ancient .be-seal:hover {
 /* --- 4.6 弹窗：枯笔手绘框（border-image） + 反色笔锋标题牌 --- */
 body.ui-style-ancient .modal-content,
 body.ui-style-ancient .cfg-panel,
-body.ui-style-ancient .location-info-popup {
+body.ui-style-ancient .location-info-popup,
+body.ui-style-ancient .scene3d-menu {
     border: 26px solid transparent !important;
     /* 水墨粗方框 border-image 九宫格：四角 24% 墨团固定、边线中段拉伸，
        任意弹窗尺寸/宽高比下边带厚度一致，不再随整体拉伸变形 */
@@ -523,6 +524,18 @@ body.ui-style-ancient .location-info-popup {
     background-position: 0 0 !important;
     background-size: auto !important;
 }
+
+/* --- 4.6a 人物弹窗：标题/简介与地点弹窗同一套 ---
+   3D 下地点与人物弹窗都复用本体那套 .location-info-* / .npc-info-* popup，古风里
+   2D 人物弹窗走的是立绘框选叠加层（没有 popup 可参照），所以这里把人物弹窗的
+   名/简介对齐 .location-info-name / .location-info-npcs，两套弹窗视觉才是同一套。 */
+body.ui-style-ancient .npc-info-name {
+    color: var(--accent-red) !important;
+    font-family: var(--font-serif) !important;
+    border-bottom: 1px solid var(--ink-light);
+    padding-bottom: 5px;
+}
+body.ui-style-ancient .npc-info-desc { color: var(--ink-dark) !important; font-family: var(--font-serif) !important; }
 
 /* --- 4.6b 面板/卡片：边框-fill 枯笔方框（border-image 九宫格 + fill 米黄铺底） ---
    边框.png 原图透明底、枯笔框偏居左上，已像素处理成紧贴裁剪的 边框-fill.png：
@@ -1431,6 +1444,18 @@ body.ui-style-flat .location-go-btn {
 }
 @media (hover: hover) {
     body.ui-style-flat .location-go-btn:hover { background: var(--f-primary-dk); }
+}
+/* 人物弹窗按钮与「前往」同一套主蓝（基础层是青色描边），2D/3D 弹窗一起统一 */
+body.ui-style-flat .npc-info-btn {
+    background: var(--f-primary);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(91, 140, 255, 0.3);
+}
+body.ui-style-flat .npc-info-btn.disabled { background: var(--f-card-2); color: var(--f-text-2); box-shadow: none; }
+@media (hover: hover) {
+    body.ui-style-flat .npc-info-btn:hover:not(:disabled) { background: var(--f-primary-dk); }
 }
 body.ui-style-flat .npc-info-name { color: var(--f-text); }
 body.ui-style-flat .npc-info-desc,

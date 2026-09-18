@@ -914,6 +914,18 @@ function fitModalToViewport(modal) {
 
         targetHeight = Math.max(0, Math.floor(desiredHeight));
         allowScroll = true;
+
+        // 固定定位的长弹窗必须落在实际可见视口内；页面container可能比屏幕更高。
+        // visualViewport也覆盖缩放/软键盘后的可见区域，内部内容仍通过overflow滚动。
+        const visual = window.visualViewport;
+        const visibleLeft = visual ? visual.offsetLeft : 0;
+        const visibleTop = visual ? visual.offsetTop : 0;
+        const visibleWidth = Math.max(1, visual ? visual.width : window.innerWidth);
+        const visibleHeight = Math.max(1, visual ? visual.height : window.innerHeight);
+        targetWidth = Math.min(Math.max(1, targetWidth), visibleWidth);
+        targetLeft = Math.max(visibleLeft, Math.min(targetLeft, visibleLeft + visibleWidth - targetWidth));
+        targetTop = Math.max(visibleTop, Math.min(targetTop, visibleTop + visibleHeight - 1));
+        targetHeight = Math.max(1, Math.min(targetHeight, visibleTop + visibleHeight - targetTop));
     }
 
     // 统一定位（固定定位，锚到#main-viewport在视口中的位置）
@@ -962,6 +974,11 @@ function bindModalAutoFit(modal) {
     // 监听滚动事件
     window.addEventListener('scroll', refresh, { passive: true });
     document.addEventListener('scroll', refresh, { passive: true });
+    const visual = window.visualViewport;
+    if (visual) {
+        visual.addEventListener('resize', refresh, { passive: true });
+        visual.addEventListener('scroll', refresh, { passive: true });
+    }
     
     // 清理函数
     modal._unbindFit = () => {
@@ -969,6 +986,10 @@ function bindModalAutoFit(modal) {
         window.removeEventListener('resize', refresh);
         window.removeEventListener('scroll', refresh);
         document.removeEventListener('scroll', refresh);
+        if (visual) {
+            visual.removeEventListener('resize', refresh);
+            visual.removeEventListener('scroll', refresh);
+        }
     };
 }
 

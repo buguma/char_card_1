@@ -1,0 +1,21 @@
+/*
+ * Offline fonts for the default standalone entry and minigames.
+ * Reuse the repository's existing TTF files; retain their actual family names.
+ * Noto Serif SC is intentionally not aliased: alchemy keeps its existing
+ * family list and uses an installed Noto font or its existing serif fallback.
+ */
+@font-face {
+    font-family: 'Ma Shan Zheng';
+    src: url('../assets/fonts/ma-shan-zheng.ttf') format('truetype');
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'ZCOOL XiaoWei';
+    src: url('../assets/fonts/zcool-xiaowei.ttf') format('truetype');
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+}

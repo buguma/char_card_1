@@ -1,0 +1,9 @@
+{
+  "type": "openai",
+  "endpoint": "REPLACED_WITH_RUN_LOOPBACK_ONLY",
+  "apiKey": "scene3d-synthetic-not-a-real-key",
+  "model": "scene3d-fixture",
+  "temperature": 0,
+  "streamMode": "stream",
+  "corsProxyEnabled": false
+}

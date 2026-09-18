@@ -1,0 +1,107 @@
+/* Only opt-in cultivation presentation is affected. Existing game/Gal DOM remains owned by the host. */
+#sect-3d-root { position:absolute; inset:0; z-index:0; overflow:hidden; }
+#sect-3d-root[hidden] { display:none !important; }
+/* The original room back button remains the single host navigation control. */
+#sect-3d-root .scene3d-back { display:none !important; }
+/* 镜头归位已改为右下角摄像机图标，尺寸/位置由渲染器 scene3d.css 提供，主机不再覆盖 */
+#main-viewport[data-scene3d-ready="true"] > .scene.active { background:transparent !important; pointer-events:none; }
+/* 翻页封面期间整层隐藏 2D 业务场景：业务 2D 场景是在点击处理器里同步切换的
+   （goToLocation → switchScene），早于 3D 的 apply()，所以纸页还在往里翻的时候，
+   目标场景的标题/人物/按钮就已经透过半透明的纸页露出来了。封面+换场期间把 2D 层
+   藏起来，等纸页翻过去（reveal）再显示，2D/3D 才都不会提前漏出目标场景。 */
+#main-viewport[data-scene3d-turning="true"] > .scene { visibility:hidden !important; pointer-events:none !important; }
+/* 3D 下隐藏 2D 固定动作按钮（悬浮热点已接管相同功能，一个场景只保留一套按钮）；返回/刷新NPC按钮保留 */
+#main-viewport[data-scene3d-ready="true"] > .scene.active .scene-actions { display:none !important; }
+#main-viewport[data-scene3d-ready="true"] > .scene.active .back-btn,
+#main-viewport[data-scene3d-ready="true"] > .scene.active .refresh-npc-btn { pointer-events:auto; }
+#main-viewport[data-scene3d-ready="true"] > .scene.active .npc-portrait,
+#main-viewport[data-scene3d-ready="true"] > .scene.active .ink-decoration,
+#main-viewport[data-scene3d-ready="true"] > #map-scene .location,
+#main-viewport[data-scene3d-ready="true"] #map-hit-areas { visibility:hidden !important; pointer-events:none !important; }
+.scene3d-notice { position:absolute; left:10px; bottom:10px; z-index:30; max-width:calc(100% - 20px); padding:8px 12px; background:#fffae9; color:#423724; border:1px solid #b7a37b; font-size:13px; }
+.scene3d-notice[hidden], .scene3d-settings[hidden] { display:none !important; }
+.scene3d-notice button { margin-left:10px; }
+/* 地点复用2D弹窗；NPC两种UI都复用古风水墨选框，尺寸限定在3D场景视窗内。 */
+.scene3d-menu { pointer-events:auto; }
+.scene3d-menu button { cursor:pointer; }
+.scene3d-menu button:disabled { cursor:not-allowed; opacity:.5; }
+/* applyUIStyle disables game-styles-theme.css entirely in flat mode. Keep this
+   scoped copy of the 2D ink artwork/layout self-contained for BOTH themes. */
+#main-viewport > .scene3d-npc-selection {
+    position:absolute; inset:0; width:100%; height:100%; display:block;
+    pointer-events:none; overflow:hidden; z-index:50;
+    /* Ancient .scene3d-menu normally gets a 26px dialog border/paper skin.
+       This layer is only a coordinate plane: that border offsets the ink ring. */
+    border:0 !important; border-image:none !important; border-radius:0 !important;
+    padding:0 !important; margin:0 !important; background:none !important; box-shadow:none !important;
+}
+.scene3d-npc-selection .npc-selection-frame { position:absolute; transform:translate(-50%,-50%); pointer-events:none; z-index:51; }
+.scene3d-npc-selection .npc-selection-frame::before {
+    content:''; position:absolute; inset:0; width:100%; height:100%; z-index:-1; pointer-events:none;
+    background:url('../assets/image/static/框选2.png') center / 100% 100% no-repeat; transform:scaleX(-1);
+}
+.scene3d-npc-selection .npc-selection-name, .scene3d-npc-selection .npc-selection-option {
+    color:#fff !important; font-family:var(--font-serif,'Kaiti','STKaiti',serif) !important; font-weight:bold;
+    text-shadow:1px 0 #000,-1px 0 #000,0 1px #000,0 -1px #000,1px 1px #000,-1px -1px #000,1px -1px #000,-1px 1px #000,2px 0 #000,-2px 0 #000,0 2px #000,0 -2px #000 !important;
+    white-space:nowrap;
+}
+.scene3d-npc-selection .npc-selection-name {
+    position:absolute; left:50%; top:-3%; transform:translateX(-50%); pointer-events:none; z-index:52;
+    font-size:clamp(18px,calc(var(--scene3d-ink-size) * .087),36px); letter-spacing:2px;
+}
+.scene3d-npc-selection .npc-selection-desc {
+    position:absolute; left:60%; top:80%; bottom:auto; transform:translateX(-50%); width:90%; max-width:none; box-sizing:border-box; z-index:52;
+    font-size:clamp(12px,calc(var(--scene3d-ink-size) * .048),20px); font-family:var(--font-sans,sans-serif) !important;
+    color:#fff !important; text-align:center; line-height:1.4; letter-spacing:.5px;
+    text-shadow:1px 0 #000,-1px 0 #000,0 1px #000,0 -1px #000,1px 1px #000,-1px -1px #000 !important;
+    background:url('../assets/image/static/背景.png') center / 100% 100% no-repeat;
+    padding:3% 4%; border-radius:0; height:auto; max-height:none; overflow:hidden; pointer-events:auto;
+    white-space:normal; text-wrap:balance; overflow-wrap:anywhere; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3;
+}
+.scene3d-npc-selection .npc-selection-options { position:absolute; left:19%; top:50%; width:0; height:0; transform:translate(-50%,-50%); z-index:55; pointer-events:none; }
+.scene3d-npc-selection .npc-selection-option {
+    position:absolute; left:0; top:0; transform:translate(-50%,-50%); pointer-events:auto !important;
+    font-size:clamp(14px,calc(var(--scene3d-ink-size) * .065),28px);
+    padding:6px 8px; letter-spacing:1px; min-width:0; min-height:32px;
+    border:0 !important; border-radius:4px; background:transparent !important; box-shadow:none !important; line-height:1.3;
+}
+.scene3d-npc-selection .npc-selection-option:hover { color:#ffeb3b !important; background:#0006 !important; transform:translate(-50%,-50%) !important; }
+.scene3d-npc-selection .npc-selection-option:disabled { color:#999 !important; background:transparent !important; }
+.scene3d-npc-selection .npc-selection-option:nth-child(1) { top:calc(var(--scene3d-ink-size) * -.20); }
+.scene3d-npc-selection .npc-selection-option:nth-child(2) { left:calc(var(--scene3d-ink-size) * -.045); }
+.scene3d-npc-selection .npc-selection-option:nth-child(3) { top:calc(var(--scene3d-ink-size) * .20); }
+.scene3d-npc-selection .npc-selection-option:focus-visible { outline:2px solid #ead69b; outline-offset:2px; }
+/* 主↔子场景切换翻页遮罩（Pro同款纸页翻动） */
+.scene3d-page-turn { position:absolute; inset:0; z-index:60; perspective:1500px; overflow:hidden; pointer-events:all; background:#223a3720; }
+.scene3d-page-turn[hidden] { display:none !important; }
+.scene3d-page-sheet { position:absolute; inset:-2px; display:flex; flex-direction:column; justify-content:center; align-items:center; background:linear-gradient(90deg,#c2b396 0,#ede4d1 3%,#f6f0e0 35%,#e7dcc3 100%); box-shadow:20px 0 80px #17292270; backface-visibility:hidden; will-change:transform; transform:rotateY(-94deg); }
+.scene3d-page-sheet:after { content:""; position:absolute; inset:5%; border:1px solid #a68c6055; pointer-events:none; }
+.scene3d-page-seal { writing-mode:vertical-rl; font-size:15px; letter-spacing:.25em; color:#a5532f; border:1px solid #a5532f77; padding:10px 6px; font-family:'Kaiti','STKaiti',serif; }
+.scene3d-page-title { margin:26px 0 12px; font-size:34px; letter-spacing:.3em; text-indent:.3em; font-family:'Kaiti','STKaiti',serif; font-weight:500; color:#2e2a24; }
+.scene3d-page-detail { margin:0; font-size:13px; letter-spacing:.2em; color:#887a5f; font-family:'Kaiti','STKaiti',serif; }
+.scene3d-page-rule { width:96px; height:2px; margin-top:20px; background:linear-gradient(90deg,transparent,#b39b75,transparent); }
+/* 悬浮互动按钮：与古风/扁平 UI 按钮统一（古风=框1-fill 山纹，扁平=主蓝胶囊） */
+.ui-style-ancient #sect-3d-root .scene3d-hotspot {
+    border:none !important; border-radius:0 !important; box-shadow:none !important;
+    background-color:transparent !important;
+    background-image:url('../assets/image/static/框1-fill.png') !important;
+    background-size:100% 100% !important; background-position:center !important; background-repeat:no-repeat !important;
+    color:var(--ink-black,#1a1a1a) !important;
+    font-family:'Kaiti','STKaiti',serif !important;
+    font-weight:bold !important; /* 与古风 .back-btn 返回按钮字重对齐（基础 .back-btn 为 font-weight:bold） */
+    letter-spacing:1px; /* 与 theme 层 .back-btn 的字距对齐 */
+    transform:none; text-align:center;
+    filter:drop-shadow(1px 2px 0 rgba(20,20,20,0.16));
+}
+.ui-style-ancient #sect-3d-root .scene3d-hotspot:hover { color:var(--accent-red,#a93226) !important; background-color:transparent !important; background-image:url('../assets/image/static/框1-fill.png') !important; }
+body.ui-style-flat #sect-3d-root .scene3d-hotspot {
+    border:none !important; border-radius:999px !important;
+    background:var(--f-primary,#3b82f6) !important; color:#fff !important;
+    box-shadow:0 2px 8px rgba(91,140,255,0.3) !important;
+}
+body.ui-style-flat #sect-3d-root .scene3d-hotspot:hover { background:var(--f-primary-dk,#2f6fd6) !important; color:#fff !important; }
+.scene3d-settings { position:fixed; inset:0; z-index:25000; background:#0008; display:flex; align-items:center; justify-content:center; padding:20px; }
+.scene3d-settings section { width:min(390px,100%); padding:22px; box-sizing:border-box; background:#fffaf1; color:#342a1c; border:2px solid #8a7352; }
+.scene3d-settings label { display:block; margin:14px 0; }
+.scene3d-settings p { font-size:13px; line-height:1.6; }
+.scene3d-settings select { padding:5px; max-width:100%; }

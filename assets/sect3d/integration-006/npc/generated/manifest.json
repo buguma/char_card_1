@@ -1,0 +1,176 @@
+{
+  "version": 1,
+  "npcs": [
+    {
+      "id": "dongting",
+      "label": "洞庭君",
+      "height": 1.3,
+      "source": "npc/洞庭君-1.3.gif",
+      "sourceSha256": "285f293ac75e9ca4ea821d6a555abd67b3458a20233bbd79b56d390e7a5ee375",
+      "sourceSize": [
+        306,
+        406
+      ],
+      "frameCount": 16,
+      "durationMs": 3200,
+      "delays": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "bounds": [
+        7,
+        7,
+        299,
+        399
+      ],
+      "alphaRange": [
+        0,
+        255
+      ],
+      "animated": true,
+      "width": 191,
+      "heightPixels": 256,
+      "cellWidth": 195,
+      "cellHeight": 260,
+      "columns": 10,
+      "padding": 2,
+      "sheets": [
+        {
+          "file": "npc/generated/dongting-0.png",
+          "first": 0,
+          "count": 16,
+          "width": 1950,
+          "height": 520
+        }
+      ]
+    },
+    {
+      "id": "anmu",
+      "label": "安慕",
+      "height": 1.4,
+      "source": "npc/安慕-1.4.gif",
+      "sourceSha256": "5cf88e51b8b255acfc1b278c6b1f7c1b17263f5264f57181c8e84b6059103a22",
+      "sourceSize": [
+        252,
+        405
+      ],
+      "frameCount": 16,
+      "durationMs": 3200,
+      "delays": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "bounds": [
+        8,
+        5,
+        245,
+        399
+      ],
+      "alphaRange": [
+        0,
+        255
+      ],
+      "animated": true,
+      "width": 154,
+      "heightPixels": 256,
+      "cellWidth": 158,
+      "cellHeight": 260,
+      "columns": 12,
+      "padding": 2,
+      "sheets": [
+        {
+          "file": "npc/generated/anmu-0.png",
+          "first": 0,
+          "count": 16,
+          "width": 1896,
+          "height": 520
+        }
+      ]
+    },
+    {
+      "id": "qiantang",
+      "label": "钱塘君",
+      "height": 1.6,
+      "source": "npc/钱塘君-1.6.gif",
+      "sourceSha256": "dfb3e92757d51e3ecfd3d3c900265c59695237090c3a4779787dbfebbd17d5c2",
+      "sourceSize": [
+        320,
+        354
+      ],
+      "frameCount": 16,
+      "durationMs": 3200,
+      "delays": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "bounds": [
+        9,
+        8,
+        312,
+        347
+      ],
+      "alphaRange": [
+        0,
+        255
+      ],
+      "animated": true,
+      "width": 229,
+      "heightPixels": 256,
+      "cellWidth": 233,
+      "cellHeight": 260,
+      "columns": 8,
+      "padding": 2,
+      "sheets": [
+        {
+          "file": "npc/generated/qiantang-0.png",
+          "first": 0,
+          "count": 16,
+          "width": 1864,
+          "height": 520
+        }
+      ]
+    }
+  ]
+}

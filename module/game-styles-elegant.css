@@ -1,0 +1,221 @@
+/* 云岫清雅：参考 pro/viewer.css 的纸色、灰绿墨色与细线语言。
+ * 仅古风表现层；不更改场景几何、显隐状态、业务锁或按钮事件。 */
+body.ui-style-ancient {
+    --paper-base: #f4f1e5;
+    --paper-light: #faf8f2;
+    --paper-dark: #e8e5da;
+    --ink-black: #283b33;
+    --ink-dark: #34453f;
+    --ink-medium: #5d6c63;
+    --ink-light: #707b71;
+    --accent-red: #934d3c;
+    --accent-cyan: #526e81;
+    --accent-gold: #967b4f;
+    --accent-green: #56795a;
+    --elegant-line: rgba(72,93,69,.22);
+    --elegant-control-line: #aeb6a8;
+    --font-serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
+    --font-sans: "Microsoft YaHei", "PingFang SC", sans-serif;
+    --border-style: 1px solid var(--elegant-line);
+    --border-double: 1px solid var(--elegant-line);
+    --shadow-hard: 0 8px 24px rgba(52,69,63,.07);
+    background: radial-gradient(ellipse at top left, #f5f2e8 0, #e2e7de 65%, #d7dfd5 100%);
+    color: var(--ink-dark);
+    font-family: var(--font-sans) !important;
+}
+body.ui-style-ancient .viewport {
+    border: 1px solid var(--elegant-control-line) !important;
+    border-image: none !important;
+    border-radius: 3px !important;
+    background-image: none !important;
+    box-shadow: 0 12px 36px rgba(39,61,46,.12) !important;
+}
+/* 状态文字以薄纸底承托，去掉黑笔触与描边，不改状态排列和进度宽度。 */
+body.ui-style-ancient .status-display {
+    background: rgba(244,241,229,.91) !important;
+    border-bottom: 1px solid var(--elegant-line) !important;
+    box-shadow: none !important;
+}
+body.ui-style-ancient .status-display :is(.date-display,.action-points-display,.mood-display,.mood-label,.mood-value,.mood-text) {
+    background: none !important;
+    color: var(--ink-dark) !important;
+    -webkit-text-stroke: 0 !important;
+    text-shadow: none !important;
+    font-family: var(--font-sans) !important;
+    font-weight: 500 !important;
+}
+/* 可读的文字按钮取代整张自带字的图片；保留原DOM文字及图标契约。 */
+body.ui-style-ancient :is(.control-btn,.scene-btn,.modal-btn,.game-btn,.location-go-btn,.back-btn,
+    .dropdown-item,.trading-btn,.detail-btn,.buy-btn,.sell-btn,.unequip-btn,.skill-action-btn,
+    .event-option-btn,.battle-option-btn,.story-expand-btn,.be-seal),
+body.ui-style-ancient :is(#free-action-send-btn,#regenerate-btn),
+body.ui-style-ancient :is(#load-modal,#save-list-modal) .modal-btn {
+    background: var(--paper-light) !important;
+    border: 1px solid var(--elegant-control-line) !important;
+    border-image: none !important;
+    border-radius: 3px !important;
+    color: var(--ink-dark) !important;
+    font-family: var(--font-serif) !important;
+    font-weight: 500 !important;
+    letter-spacing: .08em;
+    text-shadow: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+    clip-path: none !important;
+    transition: background-color .18s ease, border-color .18s ease, color .18s ease;
+}
+body.ui-style-ancient :is(.control-btn,.scene-btn,.modal-btn,.location-go-btn,.back-btn,.dropdown-item,
+    .trading-btn,.detail-btn,.buy-btn,.sell-btn,.unequip-btn,.skill-action-btn,.event-option-btn,.be-seal):hover:not(:disabled),
+body.ui-style-ancient :is(#free-action-send-btn,#regenerate-btn):hover:not(:disabled) {
+    background: #ebe8da !important;
+    color: var(--accent-red) !important;
+    border-color: var(--accent-red) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+body.ui-style-ancient .control-btn.be-seal {
+    min-height: 44px;
+    padding: 10px 8px !important;
+    font-size: clamp(12px,1.25vw,16px) !important;
+}
+body.ui-style-ancient #free-action-send-btn {
+    background: var(--accent-red) !important;
+    border-color: var(--accent-red) !important;
+    color: var(--paper-light) !important;
+}
+body.ui-style-ancient :is(#free-action-send-btn,#regenerate-btn) {
+    min-height: 40px;
+    padding: 8px 12px !important;
+    font-size: 14px !important;
+}
+body.ui-style-ancient :is(button,input,select,textarea):focus-visible {
+    outline: 2px solid var(--accent-red) !important;
+    outline-offset: 3px;
+}
+body.ui-style-ancient :is(button:disabled,[aria-disabled="true"]) { opacity: .48; }
+body.ui-style-ancient .dropdown-menu {
+    background: var(--paper-light) !important;
+    border: 1px solid var(--elegant-line) !important;
+    border-image: none !important;
+    border-radius: 3px !important;
+    box-shadow: 0 12px 32px rgba(31,51,39,.16) !important;
+    padding: 7px !important;
+}
+body.ui-style-ancient .dropdown-item { border-color: transparent !important; min-height: 40px; }
+/* 古风覆盖层：紧凑内容不再依赖整页滚动才能看到关闭按钮。
+ * 保留宿主宽度/高度和内部滚动；仅让可见弹窗从屏幕顶端开始，防止负锚点。 */
+body.ui-style-ancient .modal.viewport-overlay {
+    top: 0 !important;
+    max-height: 100vh;
+    max-height: 100dvh;
+    box-sizing: border-box;
+}
+body.ui-style-ancient .modal.viewport-overlay .modal-content { box-sizing: border-box; }
+/* 覆盖层纸面和内边距。 */
+body.ui-style-ancient :is(.modal-content,.cfg-panel,.location-info-popup) {
+    border: 1px solid var(--elegant-control-line) !important;
+    border-image: none !important;
+    border-radius: 4px !important;
+    background: var(--paper-base) !important;
+    color: var(--ink-dark);
+    padding: 24px !important;
+    box-shadow: 0 16px 48px rgba(37,58,44,.18) !important;
+}
+body.ui-style-ancient :is(.modal-content h2,.modal-content h3,.stats-group h3,.cheat-section h4,.cfg-title) {
+    font-family: var(--font-serif) !important;
+    font-weight: 500 !important;
+    color: var(--ink-dark) !important;
+    background: none !important;
+    border-bottom: 1px solid var(--elegant-line) !important;
+    padding: 0 0 12px !important;
+    margin: 0 0 18px !important;
+    transform: none !important;
+    letter-spacing: .12em;
+    text-shadow: none !important;
+}
+body.ui-style-ancient .modal-content h2 { font-size: clamp(22px,2.2vw,28px); }
+body.ui-style-ancient :is(.modal-content h3,.stats-group h3) { font-size: 19px; }
+body.ui-style-ancient :is(.stats-group,.inventory-item,.relationship-card,.equipment-stats,
+    .item-info,.shop-item-info,.shop-item-price-info,.equipment-slot,.trading-list,.trading-item-row,
+    .random-event-container,.battle-event-container,.skill-panel,.skill-card,.skill-equip-card,
+    .bounty-card,.cheat-section,.difficulty-option) {
+    border: 1px solid var(--elegant-line) !important;
+    border-image: none !important;
+    border-radius: 3px !important;
+    background: var(--paper-light) !important;
+    box-shadow: none !important;
+}
+body.ui-style-ancient :is(.difficulty-option.selected,.bounty-card-active) {
+    border-color: var(--accent-red) !important;
+    background: #f0e7d9 !important;
+}
+body.ui-style-ancient :is(input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),select,textarea),
+body.ui-style-ancient :is(#history-summary-content,#pipeline-log-content) {
+    border: 1px solid var(--elegant-control-line) !important;
+    border-image: none !important;
+    border-radius: 3px !important;
+    background: #fcfaf4 !important;
+    color: var(--ink-dark) !important;
+    font-family: var(--font-sans) !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+}
+body.ui-style-ancient :is(input,textarea)::placeholder { color: #7a8278; opacity: 1; }
+body.ui-style-ancient .bottom-panel {
+    background: var(--paper-base) !important;
+    border: 1px solid var(--elegant-line) !important;
+    border-image: none !important;
+    border-radius: 3px !important;
+    padding: 14px !important;
+    margin-top: 10px;
+    box-shadow: none !important;
+}
+body.ui-style-ancient .control-buttons { margin: 0 !important; gap: 8px; }
+body.ui-style-ancient .free-action-container { padding-top: 12px !important; gap: 8px; }
+body.ui-style-ancient .story-area {
+    border: 1px solid var(--elegant-line) !important;
+    border-image: none !important;
+    border-radius: 3px !important;
+    background-color: var(--paper-light) !important;
+    background-image: linear-gradient(rgba(250,248,242,.84),rgba(250,248,242,.84)),url('../assets/image/static/文字框or弹窗底部的水墨背景建议加透明度使用-fade.png') !important;
+    box-shadow: none !important;
+    margin-top: 10px;
+}
+body.ui-style-ancient .story-content { font-family: var(--font-serif) !important; line-height: 1.95; color: var(--ink-dark); }
+body.ui-style-ancient .story-expand-btn:hover { background: #ebe8da !important; color: var(--accent-red) !important; }
+/* 实际进度仍由原JS的inline width决定。取消旧图片轨道与灰化遮罩。 */
+body.ui-style-ancient :is(.mood-bar,.stat-bar,.relationship-bar,.skill-memory-bar) {
+    background: #d9dfd3 !important; border: none !important; border-radius: 2px !important;
+    box-shadow: none !important;
+}
+body.ui-style-ancient :is(.mood-fill,.stat-fill,.relationship-fill,.skill-memory-fill) {
+    background: var(--accent-green) !important; border-radius: 2px !important;
+}
+body.ui-style-ancient :is(.mood-fill,.stat-fill,.relationship-fill,.skill-memory-fill)::after { content: none !important; }
+body.ui-style-ancient .scene-title {
+    font-family: var(--font-serif) !important;
+    font-size: clamp(17px,2.1vw,28px) !important;
+    letter-spacing: .16em; font-weight: 500;
+    color: var(--ink-dark) !important; text-shadow: none !important;
+    background: rgba(244,241,229,.94) !important;
+    border: 1px solid var(--elegant-line) !important;
+    border-top: 2px solid var(--accent-red) !important;
+    border-radius: 2px;
+    padding: 14px 10px;
+}
+body.ui-style-ancient .scene-title::before { content: none !important; }
+body.ui-style-ancient :is(.scene3d-menu,.scene3d-settings > section) {
+    background: var(--paper-base); color: var(--ink-dark); border: 1px solid var(--elegant-control-line);
+    border-radius: 3px; font-family: var(--font-serif); box-shadow: 0 12px 36px rgba(37,58,44,.15);
+}
+@media (max-width:600px) {
+    body.ui-style-ancient :is(.modal-content,.cfg-panel,.location-info-popup) { padding: 16px !important; }
+    body.ui-style-ancient .bottom-panel { padding: 10px !important; }
+    body.ui-style-ancient .control-buttons { gap: 5px; }
+    body.ui-style-ancient .control-btn.be-seal { padding: 8px 3px !important; letter-spacing: .02em; }
+    body.ui-style-ancient :is(#free-action-send-btn,#regenerate-btn) { padding: 8px !important; font-size: 12px !important; }
+    body.ui-style-ancient :is(.modal-content h2,.modal-content h3) { letter-spacing: .08em; }
+}
+@media (prefers-reduced-motion:reduce) {
+    body.ui-style-ancient :is(button,.modal-content,.dropdown-menu,.scene-title) { animation: none !important; transition: none !important; }
+}

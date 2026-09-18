@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "headers": {"Content-Type":"text/event-stream; charset=utf-8"},
+  "steps": [
+    {"body":"data: {\"choices\":[{\"delta\":{\"content\":\"<MAIN_TEXT>合成流式第一段：测试弟子在藏经阁翻开书卷。\"}}]}\n\n"},
+    {"waitFor":"paragraph-consumed","body":"data: {\"choices\":[{\"delta\":{\"content\":\"合成流式第二段：学习完毕。|none|藏经阁|none|none</MAIN_TEXT><SUMMARY>第2周，测试弟子在藏经阁学习，完成一次合成行动。</SUMMARY><SIDE_NOTE>{\\\"时间\\\":\\\"09:30\\\",\\\"用户\\\":{\\\"位置变动\\\":\\\"none\\\"}}</SIDE_NOTE>\"}}]}\n\ndata: [DONE]\n\n"}
+  ],
+  "terminal":"end",
+  "expected":{"requestCount":1,"commitCount":1}
+}

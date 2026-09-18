@@ -362,6 +362,7 @@ function parseLLMResponse(response, mainTextContent) {
 
             // 保存当前剧情时间
             currentGameTime = timeStr;
+            if (window.GameSceneBridge) GameSceneBridge.captureTime(timeMatch[0]);
 
             // 判断昼夜
             if (hour >= 6 && hour < 18) {
@@ -1154,6 +1155,7 @@ function setupMessageListeners() {
                 battleEvent = 1;
                 randomEvent = 0;
                 GameMode = 1;
+            if (window.GameSceneBridge) GameSceneBridge.invalidate('enter-gal');
                 await handleMessageOutput(bountyUserMessage);
                 return;  // 不走普通 worldmap-exit 的后续逻辑
             }
@@ -1194,6 +1196,7 @@ function setupMessageListeners() {
             
             // 发送消息
             GameMode = 1;
+            if (window.GameSceneBridge) GameSceneBridge.invalidate('enter-gal');
             await handleMessageOutput(resultMessage);
         }
     });

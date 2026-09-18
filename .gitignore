@@ -20,3 +20,12 @@ badscreenshot/
 
 # APK 输出
 *.apk
+
+# Scene3D isolated baseline, browser profiles and per-run build staging
+.scene3d-work/
+scene3d/node_modules/
+scene3d/resources/
+
+# 自动生成的浏览器测试报告
+/tests/scene3d/reports/
+

@@ -82,6 +82,7 @@
     <link rel="stylesheet" href="module/game-styles-theme.css" id="theme-css">
     <!-- UI美化层：图标/装饰/动效（纯表现层，按 body.ui-style-* 自动适配两套主题） -->
     <link rel="stylesheet" href="module/game-styles-beautify.css" id="beautify-css">
+    <link rel="stylesheet" href="module/scene3d-host.css">
     <!-- 字体文件较大且 file:// 协议下会被浏览器 CORS 拦截，故仅在线/WebView 环境加载（双击打开时回退本地楷体） -->
     <script>
         if (location.protocol !== 'file:') {
@@ -96,6 +97,8 @@
     <div class="container">
         <div class="viewport-wrapper">
             <div class="viewport" id="main-viewport">
+                <!-- 仅表现层：不可加入.scene集合，原有业务DOM保持不变。 -->
+                <div id="sect-3d-root" data-scene3d-owned="renderer" hidden></div>
                 <!-- 悬浮提示框 -->
                 <div class="tooltip" id="tooltip"></div>
 
@@ -596,6 +599,7 @@
                         <button class="gs-tab" data-tab="summary" onclick="gsSelectTab('summary')">总结管理</button>
                         <button class="gs-tab" data-tab="recall" onclick="gsSelectTab('recall')">召回管理</button>
                         <button class="gs-tab" data-tab="prompts" onclick="gsSelectTab('prompts')">提示词管理</button>
+                        <button class="gs-tab" data-tab="scene3d" onclick="gsSelectTab('scene3d')">3D画面</button>
                     </div>
                     <!-- 右侧内容区 -->
                     <div class="gs-panel-wrap">
@@ -773,6 +777,80 @@
                         <div class="gs-panel" id="gs-panel-prompts">
                             <h3>提示词管理</h3>
                             <div id="gs-prompt-manager-root"></div>
+                        </div>
+                        <!-- 3D画面 -->
+                        <div class="gs-panel" id="gs-panel-scene3d">
+                            <h3>3D画面</h3>
+                            <p class="gs-scene3d-note">画质统一默认为「均衡」，不按设备自动降级；渲染分辨率、MSAA、阴影、氛围与调色可在下方自行调整。</p>
+                            <div class="gs-switch-row">
+                                <span class="gs-switch-label">启用3D场景</span>
+                                <label class="gs-toggle-wrap">
+                                    <input type="checkbox" id="gs-scene3d-enable" onchange="gsOnScene3dEnable(this)">
+                                    <span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span>
+                                    <span class="gs-toggle-hint" id="gs-scene3d-enable-hint">关</span>
+                                </label>
+                            </div>
+                            <div class="gs-switch-row">
+                                <span class="gs-switch-label">渲染分辨率</span>
+                                <select id="gs-scene3d-renderScale" class="gs-select" onchange="gsOnScene3dRenderScale(this)">
+                                    <option value="1">1×</option>
+                                    <option value="1.25">1.25×</option>
+                                    <option value="1.5">1.5×</option>
+                                    <option value="2">2×</option>
+                                </select>
+                            </div>
+                            <div class="gs-switch-row">
+                                <span class="gs-switch-label">抗锯齿 MSAA</span>
+                                <select id="gs-scene3d-msaa" class="gs-select" onchange="gsOnScene3dMsaa(this)">
+                                    <option value="2">2×</option>
+                                    <option value="4">4×</option>
+                                </select>
+                            </div>
+                            <div class="gs-switch-row">
+                                <span class="gs-switch-label">日月光影</span>
+                                <label class="gs-toggle-wrap">
+                                    <input type="checkbox" id="gs-scene3d-shadows" onchange="gsOnScene3dShadows(this)">
+                                    <span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span>
+                                    <span class="gs-toggle-hint" id="gs-scene3d-shadows-hint">开</span>
+                                </label>
+                            </div>
+                            <div class="gs-switch-row">
+                                <span class="gs-switch-label">云海与远山薄雾</span>
+                                <label class="gs-toggle-wrap">
+                                    <input type="checkbox" id="gs-scene3d-atmosphere" onchange="gsOnScene3dAtmosphere(this)">
+                                    <span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span>
+                                    <span class="gs-toggle-hint" id="gs-scene3d-atmosphere-hint">开</span>
+                                </label>
+                            </div>
+                            <div class="gs-range-row">
+                                <div class="gs-range-head"><label>丁达尔光束</label><span id="gs-scene3d-shaft-display">0.85</span></div>
+                                <input type="range" id="gs-scene3d-shaft" class="gs-range" min="0" max="2" step="0.05" value="0.85" oninput="gsOnScene3dTuning('shaft', this)">
+                            </div>
+                            <div class="gs-range-row">
+                                <div class="gs-range-head"><label>泛光强度</label><span id="gs-scene3d-bloom-display">1</span></div>
+                                <input type="range" id="gs-scene3d-bloom" class="gs-range" min="0" max="2.5" step="0.05" value="1" oninput="gsOnScene3dTuning('bloom', this)">
+                            </div>
+                            <div class="gs-range-row">
+                                <div class="gs-range-head"><label>饱和度</label><span id="gs-scene3d-saturation-display">1.4</span></div>
+                                <input type="range" id="gs-scene3d-saturation" class="gs-range" min="0.5" max="2" step="0.05" value="1.4" oninput="gsOnScene3dTuning('saturation', this)">
+                            </div>
+                            <div class="gs-range-row">
+                                <div class="gs-range-head"><label>对比度</label><span id="gs-scene3d-contrast-display">1.4</span></div>
+                                <input type="range" id="gs-scene3d-contrast" class="gs-range" min="0.7" max="1.6" step="0.05" value="1.4" oninput="gsOnScene3dTuning('contrast', this)">
+                            </div>
+                            <div class="gs-range-row">
+                                <div class="gs-range-head"><label>中间调</label><span id="gs-scene3d-gamma-display">0.88</span></div>
+                                <input type="range" id="gs-scene3d-gamma" class="gs-range" min="0.7" max="1.3" step="0.05" value="0.88" oninput="gsOnScene3dTuning('gamma', this)">
+                            </div>
+                            <div class="gs-range-row">
+                                <div class="gs-range-head"><label>暖调</label><span id="gs-scene3d-warmth-display">0.38</span></div>
+                                <input type="range" id="gs-scene3d-warmth" class="gs-range" min="0" max="1" step="0.05" value="0.38" oninput="gsOnScene3dTuning('warmth', this)">
+                            </div>
+                            <div class="gs-range-row">
+                                <div class="gs-range-head"><label>暗角</label><span id="gs-scene3d-vignette-display">0.85</span></div>
+                                <input type="range" id="gs-scene3d-vignette" class="gs-range" min="0" max="1" step="0.05" value="0.85" oninput="gsOnScene3dTuning('vignette', this)">
+                            </div>
+                            <p class="gs-scene3d-note">3D失败会自动回退2D，不影响存档。</p>
                         </div>
                     </div>
                 </div>
@@ -1262,6 +1340,7 @@
     <script src="ui/config-modal.js"></script>
     <script src="ui/prompt-manager-modal.js"></script>
     <script src="module/bgm-manager.js"></script>
+    <script src="module/scene3d-bridge.js"></script>
 
     <script>
         // 记录原始渲染环境状态
@@ -2545,6 +2624,7 @@ const outPut = `
                     if (locPopup) locPopup.classList.remove('show');
                 } catch (e) {}
             }
+            if (window.GameSceneBridge) GameSceneBridge.notify('back-to-map');
         }
 
         // 关闭弹窗
@@ -3056,6 +3136,7 @@ const outPut = `
             
             // 重置游戏模式
             GameMode = 0;
+            if (window.GameSceneBridge) GameSceneBridge.invalidate('return-from-gal');
             slgModeData = [];
 
             // 地点信息迭代：采集本次访问期间的历史，入队待处理（在 GameMode/mapLocation 重置之前）
@@ -3389,6 +3470,7 @@ function importSTSaveFromLoadModal() {
                 console.warn('[ImportST]', result.warnings.join('; '));
             }
             try {
+                if (window.GameSceneBridge) GameSceneBridge.invalidate('st-import-begin');
                 var payload = result.payload;
                 // 深拷贝隔断：下面 importSavePayload(payload) 会把这个 payload 存进 _cache[id]，
                 // mergeWithDefaults 不克隆数组字段（如 companionNPC/triggeredEvents），若不先克隆会与该存档槽共享引用
@@ -3436,7 +3518,9 @@ function importSTSaveFromLoadModal() {
                 hideBattleEvent();
                 currentRandomEvent = null;
                 currentBattleEvent = null;
-                inputEnable = 1;
+                // 与JSON/存档槽恢复一致：特殊事件链的有效输入锁不能被ST导入清除。
+                // ST不恢复临时随机/战斗事件；没有进行中特殊事件时仍释放临时锁。
+                if (!(inputEnable === 0 && currentSpecialEvent)) inputEnable = 1;
                 updateFreeActionInputState();
                 if (typeof storageService.setMarkWeekUiIndex === 'function') {
                     var mwIdx = typeof payload.markWeekUiIndex === 'number' ? payload.markWeekUiIndex : uiConv.length;
@@ -3457,6 +3541,7 @@ function importSTSaveFromLoadModal() {
                 if (typeof eventRunner !== 'undefined') eventRunner.resumeOnLoad();
                 var warnText = result.warnings && result.warnings.length > 0 ? '\n提示：' + result.warnings.join('；') : '';
                 showModal('ST 存档导入成功！\n存档名：' + result.saveName + warnText);
+                if (window.GameSceneBridge) GameSceneBridge.afterRestore('st-import-complete', false);
             } catch(err) {
                 showModal('导入失败：' + err.message);
             }
@@ -3473,6 +3558,7 @@ function loadSaveSlot(saveId) {
     if (typeof locationRunner !== 'undefined') locationRunner.cancel();
     var payload = storageService.loadSave(saveId);
     if (!payload) { showModal('存档加载失败'); return; }
+    if (window.GameSceneBridge) GameSceneBridge.invalidate('load-save-begin');
     // 深拷贝隔断：payload === _cache[saveId] 的直接引用，mergeWithDefaults 不克隆数组字段，
     // 不先克隆的话合并后的 gameData 会和这个存档槽缓存对象共享引用，后续原地修改会污染旧存档
     gameData = mergeWithDefaults(structuredClone(payload.gameData), defaultGameData);
@@ -3617,6 +3703,7 @@ function loadSaveSlot(saveId) {
     showModal('存档加载成功！');
     // 持久化存档恢复后的状态到 localStorage
     storageService.saveAppState({ gameData: gameData });
+    if (window.GameSceneBridge) GameSceneBridge.afterRestore('load-save-complete', false);
 }
 
 function deleteSaveSlot(saveId) {
@@ -3706,6 +3793,10 @@ function importSave() {
     input.onchange = async function(e) {
         var file = e.target.files[0];
         if (!file) return;
+        if (window.GameSceneBridge) {
+            GameSceneBridge.invalidate('json-import-begin');
+            GameSceneBridge.setBusy('json-import', true);
+        }
         try {
             var payload = await storageService.importSaveFromJson(file);
             // 深拷贝隔断：即使这里的 payload 是本次新解析出的对象，克隆一层也能保证以后无论
@@ -3851,8 +3942,11 @@ function importSave() {
             showModal('存档导入成功！');
             // 持久化存档恢复后的状态到 localStorage
             storageService.saveAppState({ gameData: gameData });
+            if (window.GameSceneBridge) GameSceneBridge.afterRestore('json-import-complete', false);
         } catch (e) {
             showModal('存档导入失败：' + e.message);
+        } finally {
+            if (window.GameSceneBridge) GameSceneBridge.setBusy('json-import', false);
         }
         toggleDropdown('history-dropdown');
     };
@@ -4843,6 +4937,27 @@ function buildSaveName() {
                 if (hint)   hint.textContent = enabled ? '开' : '关';
                 if (input)  { input.value = tokens; input.disabled = !enabled; }
             });
+
+            // 3D画面
+            const _gs3d = (typeof GameSceneBridge !== 'undefined' && GameSceneBridge) ? GameSceneBridge.getDiagnostics().preferences : null;
+            if (_gs3d) {
+                const _t = _gs3d.tuning || {};
+                const _set = function(id, val) { const el = document.getElementById(id); if (el) el.value = val; };
+                const _chk = function(id, hintId, val, on, off) {
+                    const el = document.getElementById(id); if (el) el.checked = !!val;
+                    const hint = document.getElementById(hintId); if (hint) hint.textContent = val ? on : off;
+                };
+                _chk('gs-scene3d-enable', 'gs-scene3d-enable-hint', _gs3d.enabled, '开', '关');
+                _set('gs-scene3d-renderScale', String(_gs3d.renderScale ?? 1.5));
+                _set('gs-scene3d-msaa', String(_gs3d.msaa ?? 2));
+                _chk('gs-scene3d-shadows', 'gs-scene3d-shadows-hint', _gs3d.shadows !== false, '开', '关');
+                _chk('gs-scene3d-atmosphere', 'gs-scene3d-atmosphere-hint', _gs3d.atmosphere !== false, '开', '关');
+                ['shaft', 'bloom', 'saturation', 'contrast', 'gamma', 'warmth', 'vignette'].forEach(function(k) {
+                    _set('gs-scene3d-' + k, _t[k]);
+                    const d = document.getElementById('gs-scene3d-' + k + '-display');
+                    if (d) d.textContent = _t[k];
+                });
+            }
         }
 
         // 游戏设置弹窗内各控件的事件处理
@@ -4894,6 +5009,39 @@ function buildSaveName() {
             const lvl = parseInt(el.value, 10) || 2;
             textFontLevel = lvl;
             applyFontLevel(lvl);
+        }
+
+        // ===== 3D画面设置 =====
+        function gsScene3dBridge() {
+            return (typeof GameSceneBridge !== 'undefined' && GameSceneBridge) ? GameSceneBridge : null;
+        }
+        function gsOnScene3dEnable(el) {
+            const hint = document.getElementById('gs-scene3d-enable-hint');
+            if (hint) hint.textContent = el.checked ? '开' : '关';
+            const bridge = gsScene3dBridge(); if (bridge) bridge.setPreference({ enabled: el.checked });
+        }
+        function gsOnScene3dRenderScale(el) {
+            const bridge = gsScene3dBridge(); if (bridge) bridge.setPreference({ renderScale: Number(el.value) });
+        }
+        function gsOnScene3dMsaa(el) {
+            const bridge = gsScene3dBridge(); if (bridge) bridge.setPreference({ msaa: Number(el.value) });
+        }
+        function gsOnScene3dShadows(el) {
+            const hint = document.getElementById('gs-scene3d-shadows-hint');
+            if (hint) hint.textContent = el.checked ? '开' : '关';
+            const bridge = gsScene3dBridge(); if (bridge) bridge.setPreference({ shadows: el.checked });
+        }
+        function gsOnScene3dAtmosphere(el) {
+            const hint = document.getElementById('gs-scene3d-atmosphere-hint');
+            if (hint) hint.textContent = el.checked ? '开' : '关';
+            const bridge = gsScene3dBridge(); if (bridge) bridge.setPreference({ atmosphere: el.checked });
+        }
+        function gsOnScene3dTuning(key, el) {
+            const display = document.getElementById('gs-scene3d-' + key + '-display');
+            const value = parseFloat(el.value);
+            if (display) display.textContent = el.value;
+            const bridge = gsScene3dBridge();
+            if (bridge) { const tuning = {}; tuning[key] = value; bridge.setPreference({ tuning: tuning }); }
         }
 
         // 总结管理：每周总结(runSummary)/事件总结(runEventSum) 开关（触发时机不变，仅多个开关控制）+ 事件总结总结轮次
@@ -5606,6 +5754,7 @@ function buildSaveName() {
                 var btnReturnMenu = document.getElementById('btn-return-menu');
                 if (btnReturnMenu) btnReturnMenu.style.display = '';
             }
+            if (window.GameSceneBridge) GameSceneBridge.start();
         };
         
         // 自由行动输入框事件

@@ -760,6 +760,10 @@ var storageService = (function() {
         setLocationBuffQueue(snap.locationBuff);
 
         console.log('[Storage] 已从快照还原状态');
+        // The data is already restored. Reconcile only presentation, preserving special pages.
+        if (typeof window !== 'undefined' && window.GameSceneBridge) {
+            window.GameSceneBridge.afterRestore('snapshot-restored', true);
+        }
         return true;
     }
 

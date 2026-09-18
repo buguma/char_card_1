@@ -1,0 +1,1 @@
+{"status":200,"headers":{"Content-Type":"application/json"},"steps":[{"body":"{\"choices\":[{\"message\":{\"content\":\"<MAIN_TEXT>合成非流式回复。|none|藏经阁|none|none</MAIN_TEXT><SUMMARY>第2周，测试弟子完成学习。</SUMMARY><SIDE_NOTE>{\\\"时间\\\":\\\"09:30\\\",\\\"用户\\\":{\\\"位置变动\\\":\\\"none\\\"}}</SIDE_NOTE>\"}}]}"}],"terminal":"end","expected":{"requestCount":1,"commitCount":1}}

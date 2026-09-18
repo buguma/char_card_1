@@ -1,0 +1,1 @@
+{"status":200,"headers":{"Content-Type":"text/event-stream"},"steps":[{"body":"data: {\"choices\":[{\"delta\":{\"content\":\"<MAIN_TEXT>合成被截断正文</MAIN_TEXT><SIDE_NOTE>{\"}}]}\n\ndata: [DONE]\n\n"}],"terminal":"end","expected":{"requestCount":1,"commitCount":0}}

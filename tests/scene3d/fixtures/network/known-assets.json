@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "authorization": "P0 explicit approval: substitute this known legacy CSS image with a fixed local synthetic placeholder; do not modify host CSS or make a real external request.",
+  "scope": "Business-state/UI flow regression only; this substitution is NOT evidence that original Gal artwork is available, visually correct, or offline-ready.",
+  "substitutions": [
+    {
+      "url": "https://files.catbox.moe/37jfr9.png",
+      "method": "GET",
+      "resourceType": "image",
+      "payloadFile": "network/gal-background-placeholder.svg",
+      "payloadSha256": "155cee9478bdf514a4680741de289ef3604f2219b02f8269276daf8da01bc5cf",
+      "contentType": "image/svg+xml",
+      "reason": "Known original module/game-styles.css Gal dependency; synthetic testing asset, not production replacement."
+    }
+  ]
+}

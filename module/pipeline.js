@@ -1339,10 +1339,24 @@ var pipeline = (function() {
         }
     }
 
+    // Presentation-only guard covers recall/request/commit/failure without changing business branches.
+    var _sceneTurnSequence = 0;
+    async function withSceneGuard(operation, args) {
+        var token = 'pipeline-' + (++_sceneTurnSequence);
+        var bridge = typeof window !== 'undefined' && window.GameSceneBridge;
+        if (bridge) bridge.setBusy(token, true);
+        try { return await operation.apply(null, args); }
+        finally {
+            if (bridge) {
+                bridge.setBusy(token, false);
+                bridge.notify('pipeline-finished');
+            }
+        }
+    }
     return { 
-        runTurn: runTurn, 
+        runTurn: function() { return withSceneGuard(runTurn, arguments); },
         abortCurrentTurn: abortCurrentTurn, 
         isStreaming: isStreaming,
-        handleSpecialEvent: handleSpecialEvent
+        handleSpecialEvent: function() { return withSceneGuard(handleSpecialEvent, arguments); }
     };
 })();

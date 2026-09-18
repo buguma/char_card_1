@@ -4271,7 +4271,7 @@ function setValueByPath(path, newValue) {
             case 'currentWeek': currentWeek = newValue; console.log(`[SpecialEvent]   ✓ 已设置顶层变量 currentWeek`); break;
             case 'playerMood': playerMood = newValue; console.log(`[SpecialEvent]   ✓ 已设置顶层变量 playerMood`); break;
             case 'actionPoints': actionPoints = newValue; console.log(`[SpecialEvent]   ✓ 已设置顶层变量 actionPoints`); break;
-            case 'GameMode': GameMode = newValue; console.log(`[SpecialEvent]   ✓ 已设置顶层变量 GameMode`); break;
+            case 'GameMode': GameMode = newValue; if (window.GameSceneBridge) GameSceneBridge.invalidate('special-event-mode'); console.log(`[SpecialEvent]   ✓ 已设置顶层变量 GameMode`); break;
             case 'difficulty': difficulty = newValue; console.log(`[SpecialEvent]   ✓ 已设置顶层变量 difficulty`); break;
             case 'enamor': enamor = newValue; console.log(`[SpecialEvent]   ✓ 已设置顶层变量 enamor`); break;
             case 'newWeek': newWeek = newValue; console.log(`[SpecialEvent]   ✓ 已设置顶层变量 newWeek`); break;
@@ -4319,6 +4319,7 @@ function setValueByPath(path, newValue) {
         obj[parts[parts.length - 1]] = newValue;
         console.log(`[SpecialEvent]   ✓ 已设置嵌套变量 ${path}`);
     }
+    if (window.GameSceneBridge) GameSceneBridge.notify('special-event-value');
 }
 
 /**

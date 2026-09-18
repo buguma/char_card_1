@@ -1,0 +1,28 @@
+{
+  "name": "jxz-sect-scene3d",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Isolated Three.js presentation layer and reproducible integration tooling for 姬侠传",
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "baseline": "node scripts/freeze-baseline.mjs",
+    "test:unit": "node scripts/run-unit.mjs",
+    "test:browser": "node scripts/run-browser.mjs",
+    "import-assets": "node scripts/import-assets.mjs",
+    "build": "node scripts/build.mjs",
+    "publish:assets": "node scripts/publish-assets.mjs",
+    "verify:web": "node scripts/verify-web.mjs",
+    "prepare:apk": "node scripts/prepare-apk.mjs",
+    "verify:staging": "node scripts/verify-staging.mjs",
+    "verify:apk": "node scripts/verify-apk.mjs",
+    "activate:release": "node scripts/activate-release.mjs"
+  },
+  "dependencies": { "three": "0.185.1" },
+  "devDependencies": {
+    "vite": "8.1.5",
+    "puppeteer-core": "25.10.0",
+    "acorn": "8.15.0",
+    "magic-string": "0.30.21"
+  }
+}

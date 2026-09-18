@@ -1,0 +1,1 @@
+{"status":200,"headers":{"Content-Type":"text/event-stream"},"steps":[{"body":"data: {\"choices\":[{\"delta\":{\"content\":\"<MAIN_TEXT>合成断连段落。\"}}]}\n\n"},{"waitFor":"paragraph-consumed","body":""}],"terminal":"disconnect","expected":{"requestCount":1,"commitCount":0}}
