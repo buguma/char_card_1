@@ -1,4 +1,4 @@
-// Import-safe P4-T05 desktop host controls. CLI: node tests/scene3d/host-ui.browser.mjs <new absolute report dir>
+// Import-safe P4-T05 desktop host controls. CLI: node tests/scene3d/host-ui.browser.mjs <new absolute report dir> [width height [expected build ID]]
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdir, readdir } from 'node:fs/promises';
@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 import { artifact, assertSessionSafe, diff, fixturesRoot, json, hashFile, findBrowser, newGameContext, readState, saveSessionEvidence, startGame, workspace } from '../../scene3d/scripts/test-support.mjs';
 import { startTestServer } from '../../scene3d/scripts/test-server.mjs';
+import { safeRelative, verifyRelease } from '../../scene3d/scripts/artifact-utils.mjs';
 import { clickVisible } from './iframe-business.browser.mjs';
 const button = fn => `[onclick="${fn}"]`;
 const frames = (page,n=18) => page.evaluate(n=>new Promise(resolve=>{let i=0;const tick=()=>++i>=n?resolve():requestAnimationFrame(tick);requestAnimationFrame(tick);}),n);
@@ -23,9 +24,15 @@ async function sourceIdentity(root) {
 }
 /** ctx: {browser,server,directory,gameRoot?,buildId?,runId?,viewport?}; owns only its fresh contexts. Returns explicit FAIL records without suppressing other lanes. */
 export async function hostUi(ctx) {
-  const release=await json(path.join(ctx.gameRoot||ctx.server.root||workspace,'assets/sect3d/current.json'));
-  assert.equal(release.buildId,ctx.buildId||'integration-005');
   const sourceRoot=ctx.gameRoot||ctx.server.root||workspace;
+  const release=await json(path.join(sourceRoot,'assets/sect3d/current.json'));
+  assert.equal(release.schemaVersion,1,'Unsupported current pointer schema');
+  safeRelative(release.buildId);assert.ok(!release.buildId.includes('/'),'Invalid current build ID');
+  assert.deepEqual(release.bridgeProtocol,{min:1,max:1},'Unsupported current bridge protocol');
+  assert.equal(release.manifest,`${release.buildId}/manifest.json`,'Current manifest must belong to selected build');
+  assert.match(release.manifestSha256,/^[a-f0-9]{64}$/,'Current manifest hash required');
+  if(ctx.buildId!==undefined)assert.equal(release.buildId,ctx.buildId,'Expected build must match current pointer');
+  await verifyRelease(path.join(sourceRoot,'assets/sect3d',release.buildId),release.buildId,release.manifestSha256);
   const sourceBefore=await sourceIdentity(sourceRoot);await artifact(ctx.directory,'host-source-before.json',sourceBefore);
   const results=[],lanes=[],comparisons=[];
   for(const style of [0,1]) for(const enabled of [false,true]) {
@@ -109,7 +116,7 @@ async function main() {
   const directory=process.argv[2];assert.ok(directory&&path.isAbsolute(directory),'New absolute .scene3d-work directory required');const rel=path.relative(path.join(workspace,'.scene3d-work'),directory);assert.ok(rel&&!rel.startsWith('..')&&!path.isAbsolute(rel));await mkdir(directory);
   const viewport=process.argv[3]?{width:Number(process.argv[3]),height:Number(process.argv[4])}:{width:1280,height:900};assert.ok(viewport.width>0&&viewport.height>0,'Valid CLI width/height required');
   const server=await startTestServer({gameRoot:workspace});let browser;
-  try {const puppeteer=createRequire(new URL('../../scene3d/package.json',import.meta.url))('puppeteer-core');browser=await puppeteer.launch({executablePath:await findBrowser(),headless:true,args:['--disable-background-networking','--disable-component-update','--no-first-run','--disable-sync','--disable-extensions','--disable-features=MediaRouter'],defaultViewport:viewport});const result=await hostUi({browser,server,directory,viewport,gameRoot:workspace,buildId:process.argv[5]||'integration-005'});process.exitCode=[...result.results,...result.comparisons].some(r=>r.status==='FAIL')?1:0;console.log(JSON.stringify({directory,checks:result.results.length,failures:result.results.filter(r=>r.status==='FAIL').map(r=>({label:r.label,name:r.name,error:r.error})),comparisons:result.comparisons.map(({style,status})=>({style,status}))}));}
+  try {const puppeteer=createRequire(new URL('../../scene3d/package.json',import.meta.url))('puppeteer-core');browser=await puppeteer.launch({executablePath:await findBrowser(),headless:true,args:['--disable-background-networking','--disable-component-update','--no-first-run','--disable-sync','--disable-extensions','--disable-features=MediaRouter'],defaultViewport:viewport});const result=await hostUi({browser,server,directory,viewport,gameRoot:workspace,buildId:process.argv[5]});process.exitCode=[...result.results,...result.comparisons].some(r=>r.status==='FAIL')?1:0;console.log(JSON.stringify({directory,checks:result.results.length,failures:result.results.filter(r=>r.status==='FAIL').map(r=>({label:r.label,name:r.name,error:r.error})),comparisons:result.comparisons.map(({style,status})=>({style,status}))}));}
   finally {try{if(browser)await browser.close();}finally{await server.close();}}
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))await main();

@@ -6,8 +6,9 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 import fs from 'node:fs/promises'
 import http from 'node:http'
 import { launchBrowser } from '../../scene3d/scripts/test-support.mjs'
+import { currentRelease } from './current-release.mjs'
 import { createNpcController, alphaBounds, frameAt } from '../../scene3d/src/npcs.js'
-import { createFloorSampler, findNpcFloor, seededRandom, layoutSeed, placeNpcs, cardSize } from '../../scene3d/src/npc-spawn.js'
+import { createFloorSampler, findNpcFloor, seededRandom, layoutSeed, placeNpcs, cardSize, minimumSeparation, cardsOverlap } from '../../scene3d/src/npc-spawn.js'
 import { npcHeight, createNpcSizing } from '../../scene3d/src/npc-sizing.js'
 
 // Resolve test Three through the isolated scene3d package, never root dependencies.
@@ -80,6 +81,39 @@ test('seeded placement never consults global random and is stable for a layoutKe
   } finally { Math.random = old; root.children[0].geometry.dispose(); root.children[0].material.dispose() }
 })
 
+test('one to three residents preserve the exact legacy seed stream and feet', () => {
+  const root = room(10), floor = findNpcFloor(root), camera = new THREE.OrthographicCamera(-10, 10, 10, -10, .1, 100)
+  camera.position.set(0, 10, 10); camera.lookAt(0, 0, 0); camera.updateMatrixWorld(true)
+  function legacy(npcs, random) {
+    const sampler = createFloorSampler(floor)
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const placed = []
+      for (const npc of npcs) {
+        let found = false
+        for (let trial = 0; trial < 600; trial++) {
+          const point = sampler.sample(random)
+          if (placed.every(other => Math.hypot(point.x - other.point.x, point.z - other.point.z) >= minimumSeparation(npc, other.npc, camera) && !cardsOverlap(npc, point, other.npc, other.point, camera))) {
+            placed.push({ npc, point }); found = true; break
+          }
+        }
+        if (!found) break
+      }
+      if (placed.length === npcs.length) return placed
+    }
+    throw Error('NPC_FLOOR_CROWDED')
+  }
+  try {
+    for (const count of [1, 2, 3]) for (let seed = 0; seed < 20; seed++) {
+      const npcs = Array.from({ length: count }, (_, i) => ({ height: 1.5 + i * .4, bounds: [0, 0, 1, 2] }))
+      const a = seededRandom(seed), b = seededRandom(seed)
+      const actual = placeNpcs(floor, npcs, camera, a), expected = legacy(npcs, b)
+      assert.deepEqual(actual.map(n => n.point.toArray()), expected.map(n => n.point.toArray()))
+      assert.equal(a(), b(), 'Consumes exactly the legacy number of random values')
+      assert.ok(actual.every(n => n.scale === undefined), 'No density branch for legacy rosters')
+    }
+  } finally { floor.geometry.dispose(); floor.material.dispose() }
+})
+
 test('only authored upward floor meshes are sampled, including world transforms', () => {
   const root = room(); root.position.set(3, 2, -4)
   const floor = findNpcFloor(root), sampler = createFloorSampler(floor)
@@ -98,6 +132,16 @@ test('crowding is bounded and failure does not redraw the host NPC subset', () =
   assert.throws(() => placeNpcs(floor, npcs, camera, random, { attempts: 2, trials: 3 }), /CROWDED/)
   assert.ok(draws <= 2 * 2 * 3 * 3); assert.deepEqual(npcs.map(n => n.id), [0, 1])
   floor.geometry.dispose(); floor.material.dispose()
+})
+
+test('dense candidate placement is bounded and does not relax overlap on impossible authored floors', () => {
+  const root = room(.1), floor = findNpcFloor(root), camera = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 10)
+  camera.position.set(0, 2, 2); camera.lookAt(0, 0, 0); camera.updateMatrixWorld(true)
+  let draws = 0; const random = () => { draws++; return .5 }
+  try {
+    assert.throws(() => placeNpcs(floor, Array.from({ length: 15 }, () => ({ height: 2.4, bounds: [0, 0, 1, 2] })), camera, random, { attempts: 4, trials: 12 }), /CROWDED/)
+    assert.equal(draws, 12 * 3, 'Fixed floor pool, no unbounded random retry or fabricated points')
+  } finally { floor.geometry.dispose(); floor.material.dispose() }
 })
 
 test('sizing and alpha bounds are pure, validated, and use image aspect not atlas assumptions', () => {
@@ -250,11 +294,11 @@ test('shared texture views have independent geometry UVs and remain unchanged by
   } finally { cleanup(f) }
 })
 
-test('LRU retains current plus previous subset, max six, then destroys all GPU/alpha resources', async () => {
+test('LRU retains the current and previous small subsets within its resident-safe budget, then destroys resources', async () => {
   const f = fixture()
   for (const ids of [['A', 'D', 'E'], ['F', 'G', 'H'], ['J', 'K', 'L']]) {
     await f.controller.bind(f.root, 'library', snapshot(ids.map(id => visual(id))))
-    assert.ok(f.controller.getStats().cachedAssets <= 6)
+    assert.ok(f.controller.getStats().cachedAssets <= f.controller.getStats().cacheBudget)
   }
   assert.equal(f.controller.getStats().cachedAssets, 6); assert.equal(f.controller.getStats().pinnedAssets, 3)
   assert.equal(f.controller.getStats().imagesDisposed, 3)
@@ -331,8 +375,7 @@ test('opaque scene props occlude NPC picking, and height-only changes do not rel
 
 test('real library/atlas/portrait failing seeds have reachable pixels and deliver canvas intents', { timeout: 90000 }, async t => {
   const workspace = fileURLToPath(new URL('../../', import.meta.url))
-  try { await fs.access(path.join(workspace, 'assets/sect3d/integration-003/sub_scene/library_interior.glb')) }
-  catch { t.skip('Requires retained integration-003 real assets; not a synthetic-model pass'); return }
+  const { pointer } = await currentRelease(workspace)
   const server = http.createServer(async (request, response) => {
     try {
       const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname)
@@ -358,7 +401,7 @@ test('real library/atlas/portrait failing seeds have reachable pixels and delive
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(`http://127.0.0.1:${server.address().port}/`)
   await page.exposeFunction('__npcNativeClickForTest', (x, y) => page.mouse.click(x, y))
-  const results = await page.evaluate(async () => {
+  const results = await page.evaluate(async buildId => {
     const THREE = await import('three')
     const { mount } = await import('/scene3d/src/runtime.js')
     const { createNpcController } = await import('/scene3d/src/npcs.js')
@@ -368,7 +411,7 @@ test('real library/atlas/portrait failing seeds have reachable pixels and delive
     const results = []
     for (const [id, epoch, name, kind, visualKey] of [['C', 4, '钱塘君', 'animated', 'qiantang'], ['A', 3, '破阵子', 'static', 'portrait:A']]) {
       let npc, ctx; const events = []
-      const view = mount(host, { assetBaseUrl: new URL('/assets/sect3d/integration-003/', location.href).href, quality: 'low', debug: true, reducedMotion: true,
+      const view = mount(host, { assetBaseUrl: new URL(`/assets/sect3d/${buildId}/`, location.href).href, quality: 'low', debug: true, reducedMotion: true,
         npcFactory(value) { ctx = value; npc = createNpcController(value); return npc }, onEvent: event => events.push(event) })
       try {
         await view.applyState({ protocol: 1, sessionEpoch: epoch, revision: 1, mode: 0, logicalPage: 'cangjingge', gameLocationId: 'cangjingge', sceneId: 'library',
@@ -414,8 +457,8 @@ test('real library/atlas/portrait failing seeds have reachable pixels and delive
       } finally { await view.destroy() }
     }
     return results
-  })
-  t.diagnostic(JSON.stringify({ realAssets: 'integration-003', results }))
+  }, pointer.buildId)
+  t.diagnostic(JSON.stringify({ realAssets: pointer.buildId, results }))
   for (const value of results) {
     assert.ok(value.hitCount > 0); assert.equal(value.intents, value.hitCount); assert.equal(value.topIsCanvas, true); assert.equal(value.nativeIntents, 1)
     assert.equal(value.cancelledIntents, 0, 'Interrupted focus must never reopen a menu after unlock')
@@ -433,7 +476,7 @@ test('real library/atlas/portrait failing seeds have reachable pixels and delive
 test('invalid host subsets are rejected instead of drawing a new roster', async () => {
   const f = fixture()
   try {
-    for (const npcs of [[visual('A'), visual('D'), visual('E'), visual('F')], [visual('A'), visual('A')], [visual('Z')]]) {
+    for (const npcs of [Array.from({ length: 16 }, (_, i) => visual(String.fromCharCode(65 + i))), [visual('A'), visual('A')], [visual('Z')]]) {
       const result = await f.controller.bind(f.root, 'library', snapshot(npcs))
       assert.equal(result.status, 'degraded'); assert.equal(result.code, 'NPC_SUBSET_INVALID'); assert.equal(f.controller.getStats().cards, 0)
     }

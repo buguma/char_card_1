@@ -6,6 +6,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 import { readFile } from 'node:fs/promises'
 import { createLocationLabels } from '../../scene3d/src/location-labels.js'
 import { INTERIOR_SCENES } from '../../scene3d/src/interior-scenes.js'
+import { currentRelease } from './current-release.mjs'
 
 const require = createRequire(new URL('../../scene3d/package.json', import.meta.url))
 const THREE = await import(pathToFileURL(path.join(path.dirname(require.resolve('three')), 'three.module.js')).href)
@@ -119,6 +120,46 @@ test('authored names are plain text; visibility, rebind and dispose leave no sta
   } finally { f.dispose() }
 })
 
+test('headcounts mirror one white dot per resident with the original empty divider state', () => {
+  const f = fixture()
+  try {
+    f.labels.setCounts({ cangjingge: 4 }); f.show()
+    const label = f.layer.children[0], [divider, people] = label.children
+    assert.equal(divider.className, 'location-label-divider')
+    assert.equal(people.className, 'location-people')
+    for (const count of [4, 1, 15, 16, 0]) {
+      f.labels.setCounts({ cangjingge: count })
+      assert.equal(people.children.length, count)
+      assert.ok(people.children.every(dot => dot.className === 'people-dot'))
+      assert.equal(divider.style.opacity, count ? '1' : '0.35')
+      assert.equal(label.dataset.npcCount, String(count))
+      assert.equal(f.labels.getStats().labels[0].npcCount, count)
+      assert.equal(label.textContent, '藏经阁')
+    }
+    const counts = { cangjingge: 4 }; f.labels.setCounts(counts)
+    const first = people.children[0]; counts.cangjingge = 0
+    f.labels.update(); assert.equal(people.children.length, 4)
+    f.labels.setCounts({ cangjingge: 4 }); assert.equal(people.children[0], first, 'Unchanged snapshots do not rebuild dots')
+    for (const invalid of [-1, 1.5, 17, Number.MAX_SAFE_INTEGER, '3']) {
+      f.labels.setCounts({ cangjingge: invalid }); assert.equal(people.children.length, 0)
+    }
+  } finally { f.dispose() }
+})
+
+test('headcounts update while hidden, bind to logical locations and leave no stale decorations', () => {
+  const f = fixture()
+  try {
+    f.show(); f.labels.setVisible(false)
+    f.labels.setCounts({ cangjingge: 3, huofang: 7 })
+    assert.equal(f.layer.children[0].children[1].children.length, 3)
+    f.labels.bind(f.root, 'library'); f.labels.setCounts({ cangjingge: 1 })
+    f.show(); assert.equal(f.layer.children[0].children[1].children.length, 1)
+    f.labels.setCounts({ huofang: 7 }); assert.equal(f.layer.children[0].children[1].children.length, 0)
+    f.labels.dispose(); f.labels.setCounts({ cangjingge: 15 })
+    assert.equal(f.container.children.length, 0)
+  } finally { f.dispose() }
+})
+
 const pavilionRoof = new THREE.Vector3(19.8, 10.08, -15.8)
 const gateRoof = new THREE.Vector3(0, 13.054235, 13.1)
 function meshFromBounds(name, min, max) {
@@ -180,7 +221,8 @@ for (const id of ['gate', 'back_mountain']) test(`small replacement ${id} uses o
 })
 
 test('real GLB arch roof and east pavilion finial validate landmarks, not stairs/bridge/terrain', async t => {
-  const base = new URL('../../assets/sect3d/integration-013/', import.meta.url)
+  const { releaseRoot } = await currentRelease()
+  const base = pathToFileURL(releaseRoot + path.sep)
   const bytes = await readFile(new URL('sect_diorama.glb', base))
   const length = bytes.readUInt32LE(12), gltf = JSON.parse(bytes.toString('utf8', 20, 20 + length)), binary = bytes.subarray(28 + length)
   const authored = gltf.nodes.find(n => n.extras?.interactionId === 'back_mountain')

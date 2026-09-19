@@ -4,7 +4,7 @@ import { createNavigation } from './navigation.js'
 import { INTERIOR_SCENES } from './interior-scenes.js'
 import { RENDER_DEFAULTS, DEFAULT_PAPER_COLOR, DEFAULT_MSAA } from './render-defaults.js'
 import { createHotspots } from './interactive-hotspots.js'
-import { frameNpcCamera } from './npc-focus.js'
+import { frameNpcCamera, clearNpcCameraDamping, restoreNpcRoomCamera } from './npc-focus.js'
 import { createLocationLabels } from './location-labels.js'
 import { createModelByteCache, createModelBytePrefetcher } from './model-byte-cache.js'
 
@@ -245,9 +245,8 @@ export function mount(container, options = {}) {
     cinematic?.setSelection([])
     if (shouldRestore) {
       const fromPosition = camera.position.clone(), fromTarget = controls.target.clone(), fromZoom = camera.zoom
-      // Canonical activation view, not the orbit/zoom present before the click.
-      // positionCamera also clears OrbitControls' residual damping deltas.
-      positionCamera(activeRecord); fit()
+      clearNpcCameraDamping(camera, controls)
+      restoreNpcRoomCamera(camera, controls, activeRecord.target); fit()
       if (!motionReduced || menuLocked) {
         npcViewReturn = { epoch: latest.sessionEpoch, sceneId: activeRecord.id, awaitingMenuUnlock: menuLocked, fromPosition, fromTarget, fromZoom,
           position: camera.position.clone(), target: controls.target.clone(), zoom: camera.zoom }
@@ -399,7 +398,13 @@ export function mount(container, options = {}) {
         const geometry = npc.getFocusGeometry?.(selectedNpcId)
         if (geometry) frameNpcCamera(camera, controls, geometry)
       }
+      if (npcFocus) {
+        const geometry = npc.getFocusGeometry?.(npcFocus.id)
+        if (geometry?.projectedHeight > 0) npcFocus.zoom = camera.zoom * .29 / geometry.projectedHeight
+      }
       renderer.setPixelRatio(pixelRatio()); renderer.setSize(width, height, false); cinematic?.resize(width, height)
+      npc.tick?.(0, 0)
+      locationLabels?.update()
     }
     wakeWaiters(); schedule()
   }
@@ -448,7 +453,7 @@ export function mount(container, options = {}) {
     npcViewReturn = null
     // Fit uses the current viewport, so portrait/landscape changes during the
     // return cannot resurrect the old frustum or reframe the dismissed NPC.
-    positionCamera(activeRecord); fit()
+    restoreNpcRoomCamera(camera, controls, activeRecord.target); fit()
     npc.tick?.(now, 0)
     syncInput()
   }
@@ -474,7 +479,7 @@ export function mount(container, options = {}) {
     // Asset-load fallback buttons have no world card; keep their original actions usable.
     if (!npc.getFocusGeometry?.(gameNpcId)) { emit('npcIntent', { gameNpcId, anchor: Object.freeze({ ...anchor }) }); return true }
     const fromPosition = camera.position.clone(), fromTarget = controls.target.clone(), fromZoom = camera.zoom
-    positionCamera(activeRecord); fit()
+    clearNpcCameraDamping(camera, controls)
     const geometry = npc.getFocusGeometry(gameNpcId)
     if (!geometry || !frameNpcCamera(camera, controls, geometry)) return false
     selectedNpcId = gameNpcId
@@ -649,6 +654,7 @@ export function mount(container, options = {}) {
     if (!valid()) return
     ready = true; initializeFailure = null
     hotspots?.bind(record.root, record.id)
+    locationLabels?.setCounts(latest?.locationNpcCounts)
     locationLabels?.bind(record.root, record.id)
     if (record.id === 'main' && canPrefetch()) prefetch?.start()
     const key = `${latest.sessionEpoch}:${record.id}:${navigation.generation}`
@@ -717,6 +723,7 @@ export function mount(container, options = {}) {
       setNpcController(npcFactory({ scene, camera, renderer, assetBaseUrl, emitNpcIntent, container: shell, registry, isInteractionEnabled: canInteract, fetch: options.fetch, npcShadows: options.npcShadows }))
       hotspots = createHotspots({ THREE, container: shell, camera, renderer, onAction: (sceneId, mesh, label) => emit('actionIntent', { sceneId, mesh, label }) })
       locationLabels = createLocationLabels({ THREE, container: shell, camera })
+      locationLabels.setCounts(latest?.locationNpcCounts)
       navigation = createNavigation({ load: loadModel, activate, deactivate, release: releaseRecord,
         onStart() { ready = false; drawable = false; appliedVersion = null; invalidateNpc(); stopFrames(); syncInput() },
         onError(error, id) { ready = false; initializeFailure = error; emitError(error, id); syncInput() },
@@ -743,6 +750,8 @@ export function mount(container, options = {}) {
     const routeChanged = latest && (latest.sessionEpoch !== snapshot.sessionEpoch || latest.sceneId !== snapshot.sceneId)
     if (routeChanged) { cancelNavigation(); ready = false; drawable = false; appliedVersion = null }
     latest = snapshot
+    // Menu locks may pause RAF; counts are host state, not animation state.
+    locationLabels?.setCounts(snapshot.locationNpcCounts)
     // Flags change only at a host call boundary, never in asynchronous completion.
     // Reapplying the same snapshot after a hide is an explicit lifecycle resume.
     visible = snapshot.visible && snapshot.mode === 0 && Boolean(snapshot.sceneId)
@@ -859,7 +868,7 @@ export function mount(container, options = {}) {
     selectedNpcId, focusingNpc: Boolean(npcFocus), returningNpcView: Boolean(npcViewReturn),
     modelByteCache: diagnosticSnapshot(modelCache?.getStats() || { entries: 0, bytes: 0 }),
     prefetch: diagnosticSnapshot(prefetch?.getStats() || lastPrefetchStats || { pending: 0, timers: 0 }),
-    cameraView: camera ? Object.freeze({ position: Object.freeze(camera.position.toArray()), target: Object.freeze(controls.target.toArray()), zoom: camera.zoom, minPolarAngle: controls.minPolarAngle, maxPolarAngle: controls.maxPolarAngle, enablePan: controls.enablePan }) : null,
+    cameraView: camera ? Object.freeze({ position: Object.freeze(camera.position.toArray()), target: Object.freeze(controls.target.toArray()), offset: Object.freeze(camera.position.clone().sub(controls.target).toArray()), distance: camera.position.distanceTo(controls.target), roomTarget: activeRecord?.target ? Object.freeze(activeRecord.target.toArray()) : null, zoom: camera.zoom, minPolarAngle: controls.minPolarAngle, maxPolarAngle: controls.maxPolarAngle, enablePan: controls.enablePan }) : null,
     renderTuning: diagnosticSnapshot(cinematic?.getStats?.() || null),
     environmentState: diagnosticSnapshot(api.metrics.environment || null),
     renderSettings: Object.freeze({ renderScale: settings.renderScale, msaa: settings.msaa, shadows: settings.shadows, atmosphere: settings.atmosphere, tuning: Object.freeze({ ...settings.tuning }), selectedObjects: selectionObjects.length }),

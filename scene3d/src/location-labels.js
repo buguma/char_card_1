@@ -1,4 +1,5 @@
 import { INTERIOR_SCENES } from './interior-scenes.js'
+import { SCENE_TO_LOCATION } from './protocol.js'
 
 // Mesh-local landmarks verified against Draco-decoded baseline-007c / integration-013.
 // gate_matte also contains stairs out to z=45.83255: its box center is NOT the arch.
@@ -24,7 +25,26 @@ export function createLocationLabels({ THREE, container, camera }) {
   layer.hidden = true
   container.appendChild(layer)
   const world = new THREE.Vector3(), view = new THREE.Vector3(), projected = new THREE.Vector3()
-  let items = [], sceneId = null, disposed = false
+  let items = [], sceneId = null, disposed = false, counts = {}
+
+  function applyCount(item) {
+    const value = counts[SCENE_TO_LOCATION[item.label.dataset.sceneId]]
+    const count = Number.isSafeInteger(value) && value >= 0 && value <= 16 ? value : 0
+    if (item.count === count) return
+    for (const child of [...item.people.children]) child.remove()
+    for (let i = 0; i < count; i++) {
+      const dot = doc.createElement('span'); dot.className = 'people-dot'
+      item.people.appendChild(dot)
+    }
+    item.divider.style.opacity = count > 0 ? '1' : '0.35'
+    item.label.dataset.npcCount = String(count)
+    item.count = count
+  }
+  function setCounts(value = {}) {
+    if (disposed) return
+    counts = { ...value }
+    for (const item of items) applyCount(item)
+  }
 
   function clear() {
     for (const item of items) item.label.remove()
@@ -65,8 +85,12 @@ export function createLocationLabels({ THREE, container, camera }) {
       label.dataset.sceneId = data.interactionId
       label.style.pointerEvents = 'none'
       label.hidden = true
+      const divider = doc.createElement('span'); divider.className = 'location-label-divider'
+      const people = doc.createElement('span'); people.className = 'location-people'
+      label.appendChild(divider); label.appendChild(people)
       layer.appendChild(label)
-      items.push({ node: anchorNode, point, label })
+      const item = { node: anchorNode, point, label, divider, people, count: null }
+      items.push(item); applyCount(item)
       seen.add(data.interactionId)
     })
   }
@@ -104,9 +128,9 @@ export function createLocationLabels({ THREE, container, camera }) {
     }
   }
   return {
-    bind, clear, setVisible, update,
+    bind, clear, setVisible, setCounts, update,
     dispose() { if (disposed) return; clear(); disposed = true; layer.remove() },
     getStats() { return { sceneId, count: items.length, visible: !layer.hidden, disposed,
-      labels: items.map(item => ({ sceneId: item.label.dataset.sceneId, text: item.label.textContent, visible: !layer.hidden && !item.label.hidden })) } },
+      labels: items.map(item => ({ sceneId: item.label.dataset.sceneId, text: item.label.textContent, npcCount: item.count, visible: !layer.hidden && !item.label.hidden })) } },
   }
 }

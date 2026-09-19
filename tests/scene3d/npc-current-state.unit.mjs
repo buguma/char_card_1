@@ -9,6 +9,10 @@ import { pathToFileURL } from 'node:url'
 import { createNpcController, NPC_ANIMATED_IDS, frameAt } from '../../scene3d/src/npcs.js'
 import { npcEffectiveHeight, DEFAULT_NPC_SCENE_SCALE } from '../../scene3d/src/npc-sizing.js'
 import { normalizeSnapshot } from '../../scene3d/src/protocol.js'
+import { frameNpcCamera } from '../../scene3d/src/npc-focus.js'
+import { currentRelease } from './current-release.mjs'
+import { INTERIOR_SCENES } from '../../scene3d/src/interior-scenes.js'
+import { placeNpcs, cardsOverlap, seededRandom, layoutSeed, createFloorSampler } from '../../scene3d/src/npc-spawn.js'
 
 const require = createRequire(new URL('../../scene3d/package.json', import.meta.url))
 const THREE = await import(pathToFileURL(path.join(path.dirname(require.resolve('three')), 'three.module.js')).href)
@@ -71,6 +75,166 @@ test('all 15 fixed business identities map to atlases without changing the selec
     assert.equal(stats.texturesCreated, stats.texturesDisposed)
     assert.ok(f.images.every(image => image.releases === 1))
   } finally { f.cleanup() }
+})
+
+test('four and all fifteen resident atlases stay pinned, with real placement and bounded cache on visual replacement', async () => {
+  const f = fixture({ placement: undefined })
+  try {
+    for (const count of [4, 15]) {
+      const npcs = Object.keys(identities).slice(0, count).map(id => visual(id))
+      const result = await f.controller.bind(f.root, 'library', snapshot(npcs))
+      assert.equal(result.cards, count); assert.equal(result.fallbacks, 0)
+      const stats = f.controller.getStats()
+      assert.equal(stats.pinnedAssets, count); assert.ok(stats.cachedAssets <= stats.cacheBudget)
+      assert.deepEqual(stats.residents.map(n => n.gameNpcId), npcs.map(n => n.gameNpcId))
+      for (const npc of stats.residents) assert.ok(npc.foot.every(Number.isFinite))
+      for (const card of f.root.getObjectByName('Scene3D_NPCs').children.filter(n => n.userData.scene3dNpc)) {
+        assert.equal(card.userData.asset.disposed, false)
+        assert.ok(card.userData.asset.sheets.every(s => !s.image.released))
+      }
+    }
+    // Replace all 15 visuals: old unpinned entries may be evicted, live ones cannot.
+    const replacements = Object.keys(identities).map(id => ({ gameNpcId: id, visualKind: 'static', visualKey: `v2:${id}`, portraitUrl: `https://fixture.test/${id}.png` }))
+    const result = await f.controller.bind(f.root, 'library', snapshot(replacements))
+    assert.equal(result.cards, 15); assert.equal(f.controller.getStats().pinnedAssets, 15)
+    assert.equal(f.controller.getStats().cachedAssets, 18)
+    assert.equal(f.controller.getStats().residentLimit, 15)
+    f.controller.dispose()
+    assert.ok(f.images.every(image => image.releases === 1))
+    assert.equal(f.controller.getStats().texturesCreated, f.controller.getStats().texturesDisposed)
+  } finally { f.cleanup() }
+})
+
+test('fifteen residents retain same-ID fallback if genuine floor placement fails', async () => {
+  const f = fixture({ placement: undefined })
+  try {
+    f.floor.name = 'not-an-authored-floor'
+    const ids = Object.keys(identities)
+    const result = await f.controller.bind(f.root, 'library', snapshot(ids.map(id => visual(id))))
+    assert.equal(result.cards, 0); assert.equal(result.fallbacks, 15)
+    assert.deepEqual(f.controller.getStats().fallbacks.map(n => n.gameNpcId), ids)
+    assert.equal(f.controller.getStats().pinnedAssets, 0)
+  } finally { f.cleanup() }
+})
+
+// Decode the release's actual authored floor triangles in Node (no browser,
+// renderer, synthetic floor, GLTFLoader network adapter, or asset mutation).
+function releaseFloor(bytes, draco) {
+  const length = bytes.readUInt32LE(12), gltf = JSON.parse(bytes.toString('utf8', 20, 20 + length)), binary = bytes.subarray(28 + length)
+  function accessor(index) {
+    const a = gltf.accessors[index], v = gltf.bufferViews[a.bufferView]
+    const count = a.type === 'VEC3' ? 3 : 1, size = { 5126: 4, 5125: 4, 5123: 2, 5121: 1 }[a.componentType]
+    const result = []
+    for (let i = 0; i < a.count; i++) for (let j = 0; j < count; j++) {
+      const offset = (v.byteOffset || 0) + (a.byteOffset || 0) + i * (v.byteStride || count * size) + j * size
+      result.push(a.componentType === 5126 ? binary.readFloatLE(offset) : binary.readUIntLE(offset, size))
+    }
+    return result
+  }
+  const nodes = gltf.nodes.map(n => {
+    const group = new THREE.Group(); group.name = n.name || ''; group.userData = n.extras || {}
+    if (n.matrix) { group.matrix.fromArray(n.matrix); group.matrix.decompose(group.position, group.quaternion, group.scale) }
+    else { if (n.translation) group.position.fromArray(n.translation); if (n.rotation) group.quaternion.fromArray(n.rotation); if (n.scale) group.scale.fromArray(n.scale) }
+    return group
+  })
+  gltf.nodes.forEach((n, i) => { for (const child of n.children || []) nodes[i].add(nodes[child]) })
+  const nodeIndex = gltf.nodes.findIndex(n => n.name === 'floor' && n.extras?.npcSpawn)
+  assert.ok(nodeIndex >= 0, 'Actual room must have an authored floor')
+  const primitive = gltf.meshes[gltf.nodes[nodeIndex].mesh].primitives[0], compressed = primitive.extensions?.KHR_draco_mesh_compression
+  let positions, indices
+  if (compressed) {
+    const view = gltf.bufferViews[compressed.bufferView], chunk = binary.subarray(view.byteOffset || 0, (view.byteOffset || 0) + view.byteLength)
+    const decoder = new draco.Decoder(), buffer = new draco.DecoderBuffer(), mesh = new draco.Mesh(), values = new draco.DracoFloat32Array(), face = new draco.DracoInt32Array()
+    try {
+      buffer.Init(chunk, chunk.length); const status = decoder.DecodeBufferToMesh(buffer, mesh); assert.ok(status.ok(), status.error_msg())
+      decoder.GetAttributeFloatForAllPoints(mesh, decoder.GetAttributeByUniqueId(mesh, compressed.attributes.POSITION), values)
+      positions = Array.from({ length: mesh.num_points() * 3 }, (_, i) => values.GetValue(i)); indices = []
+      for (let i = 0; i < mesh.num_faces(); i++) { decoder.GetFaceFromMesh(mesh, i, face); indices.push(face.GetValue(0), face.GetValue(1), face.GetValue(2)) }
+    } finally { for (const value of [face, values, mesh, buffer, decoder]) draco.destroy(value) }
+  } else { positions = accessor(primitive.attributes.POSITION); indices = primitive.indices === undefined ? null : accessor(primitive.indices) }
+  const geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  if (indices) geometry.setIndex(indices)
+  const floor = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }))
+  floor.name = 'floor'; floor.userData = gltf.nodes[nodeIndex].extras; nodes[nodeIndex].add(floor); floor.updateWorldMatrix(true, false)
+  return floor
+}
+
+test('actual release room floors render all 4 and 15 residents with adaptive size and no overlapping cards', async t => {
+  const { releaseRoot } = await currentRelease()
+  const factory = require(path.join(releaseRoot, 'draco/draco_wasm_wrapper.js'))
+  const draco = await factory({ wasmBinary: await readFile(path.join(releaseRoot, 'draco/draco_decoder.wasm')) })
+  const manifest = JSON.parse(await readFile(path.join(releaseRoot, 'npc/generated/manifest.json'), 'utf8'))
+  const roster = Object.values(identities).map(id => { const n = manifest.npcs.find(n => n.id === id); return { ...n, height: n.height * 1.5 } })
+  const failures = []
+  for (const [id, descriptor] of Object.entries(INTERIOR_SCENES)) {
+    const floor = releaseFloor(await readFile(path.join(releaseRoot, descriptor.file)), draco)
+    const camera = new THREE.OrthographicCamera(-40, 40, 30, -30, .1, 420)
+    camera.position.setFromSphericalCoords(80, Math.PI / 3, (descriptor.azimuth || 0) * Math.PI / 180); camera.lookAt(0, 0, 0); camera.updateMatrixWorld(true)
+    try {
+      for (const count of [4, 15]) {
+        const npcs = roster.slice(0, count), key = `real:${id}:${count}`
+        const start = performance.now()
+        try {
+          const points = placeNpcs(floor, npcs, camera, seededRandom(layoutSeed(`${key}:${id}`)))
+          assert.equal(points.length, count)
+          const placementScale = points[0].scale ?? 1
+          assert.ok(placementScale > 0 && placementScale <= 1)
+          if (count === 4 || ['gate', 'training', 'fields'].includes(id)) assert.equal(placementScale, 1, 'Do not shrink a full-size feasible roster')
+          assert.ok(points.every(p => (p.scale ?? 1) === placementScale), 'Uniform relative heights')
+          const effective = npcs.map(n => ({ ...n, height: n.height * placementScale }))
+          for (let i = 0; i < count; i++) for (let j = 0; j < i; j++) assert.equal(cardsOverlap(effective[i], points[i].point, effective[j], points[j].point, camera), false)
+          const repeated = placeNpcs(floor, npcs, camera, seededRandom(layoutSeed(`${key}:${id}`)))
+          assert.deepEqual(repeated.map(p => [p.point.toArray(), p.scale]), points.map(p => [p.point.toArray(), p.scale]), 'Exact seeded density placement')
+          const ray = new THREE.Raycaster()
+          for (const { point } of points) { ray.set(point.clone().add(new THREE.Vector3(0, .1, 0)), new THREE.Vector3(0, -1, 0)); assert.ok(ray.intersectObject(floor).some(hit => hit.point.distanceTo(point) < .001), 'Feet remain on actual authored floor') }
+          // Actual controller integration: full roster creates real card meshes,
+          // not fallback buttons, using the same decoded floor and manifest.
+          let root = floor; while (root.parent) root = root.parent
+          const f = fixture({ data: manifest, placement: undefined, camera })
+          f.scene.add(root)
+          const originalPosition = camera.position.clone(), originalZoom = camera.zoom
+          try {
+            const input = snapshot(Object.keys(identities).slice(0, count).map(n => visual(n)), { sceneId: id, layoutKey: key })
+            const result = await f.controller.bind(root, id, input)
+            assert.equal(result.cards, count); assert.equal(result.fallbacks, 0)
+            const stats = f.controller.getStats()
+            close(stats.placementScale, placementScale)
+            assert.equal(stats.pinnedAssets, count)
+            for (let i = 0; i < count; i++) {
+              const resident = stats.residents[i]
+              close(resident.placementScale, placementScale)
+              close(resident.baseHeight, npcs[i].height / 1.5)
+              close(resident.height, npcs[i].height * placementScale)
+              assert.deepEqual(resident.foot, points[i].point.toArray())
+              assert.ok(root.getObjectByName(`Scene3D_NPC_${resident.gameNpcId}`)?.isMesh)
+            }
+            const controls = { target: new THREE.Vector3(), minZoom: .5, maxZoom: 5 }
+            const offset = camera.position.clone().sub(controls.target)
+            for (const resident of stats.residents) {
+              assert.equal(frameNpcCamera(camera, controls, f.controller.getFocusGeometry(resident.gameNpcId)), true)
+              close(f.controller.getFocusGeometry(resident.gameNpcId).projectedHeight, .29)
+              close(camera.position.clone().sub(controls.target).distanceTo(offset), 0)
+            }
+            const top = camera.top, bottom = camera.bottom
+            f.renderer.domElement.getBoundingClientRect = () => ({ left: 0, top: 0, width: 375, height: 812 })
+            camera.top = 45; camera.bottom = -45; camera.updateProjectionMatrix()
+            const focusedId = stats.residents.at(-1).gameNpcId
+            frameNpcCamera(camera, controls, f.controller.getFocusGeometry(focusedId))
+            close(f.controller.getFocusGeometry(focusedId).projectedHeight, .29)
+            assert.ok(f.controller.getStats().residents.at(-1).outline.cssWidth < .9, 'Scaled focused mobile card has a thin actual-size contour')
+            camera.top = top; camera.bottom = bottom; camera.updateProjectionMatrix()
+            const feet = stats.residents.map(n => n.foot)
+            assert.deepEqual(f.controller.getStats().residents.map(n => n.foot), feet, 'Focus never relocates safe feet')
+          } finally {
+            f.cleanup(); root.removeFromParent()
+            camera.position.copy(originalPosition); camera.zoom = originalZoom; camera.lookAt(0, 0, 0); camera.updateProjectionMatrix(); camera.updateMatrixWorld(true)
+          }
+          t.diagnostic(JSON.stringify({ id, count, placementScale, area: createFloorSampler(floor).area, ms: performance.now() - start }))
+        } catch (error) { failures.push({ id, count, error: error.message, ms: performance.now() - start }) }
+      }
+    } finally { floor.geometry.dispose(); floor.material.dispose() }
+  }
+  assert.deepEqual(failures, [])
 })
 
 test('protocol leaves omitted or invalid heights authored; explicit effective heights remain compatible', () => {

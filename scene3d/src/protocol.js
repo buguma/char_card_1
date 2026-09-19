@@ -12,23 +12,36 @@ export function normalizeSnapshot(input) {
   if (sceneId !== null && !own(SCENE_TO_LOCATION, sceneId)) invalid('Unknown or unavailable scene')
   if (sceneId && (input.mode !== 0 || LOCATION_TO_SCENE[input.logicalPage] !== sceneId || LOCATION_TO_SCENE[input.gameLocationId] !== sceneId)) invalid('Inconsistent route')
   for (const key of ['visible', 'renderEnabled', 'interactive']) if (typeof input[key] !== 'boolean') invalid(`Invalid ${key}`)
+  if (!Array.isArray(input.residents ?? []) || !Array.isArray(input.renderedNpcs ?? [])) invalid('Invalid NPC roster')
   const residents = (input.residents ?? []).map(item => {
-    if (!/^[A-O]$/.test(item.gameNpcId) || item.visible === false) invalid('Inconsistent resident')
+    if (!item || typeof item.gameNpcId !== 'string' || !/^[A-O]$/.test(item.gameNpcId) || item.visible === false) invalid('Inconsistent resident')
     return { gameNpcId: item.gameNpcId, displayName: String(item.displayName ?? '') }
   })
   const ids = new Set(residents.map(item => item.gameNpcId))
   if (ids.size !== residents.length) invalid('Duplicate residents')
   const renderedNpcs = (input.renderedNpcs ?? []).map(item => {
-    if (!ids.has(item.gameNpcId) || !['static', 'animated', 'atlas'].includes(item.visualKind)) invalid('Inconsistent rendered NPC')
+    if (!item || !ids.has(item.gameNpcId) || !['static', 'animated', 'atlas'].includes(item.visualKind)) invalid('Inconsistent rendered NPC')
     // Missing height is authored, not a 1.5m override: NPCs resolve manifest CSV defaults.
     // Explicit heights retain their effective world-space meaning for older hosts.
     return { gameNpcId: item.gameNpcId, displayName: String(item.displayName ?? residents.find(resident => resident.gameNpcId === item.gameNpcId)?.displayName ?? item.gameNpcId), visualKind: item.visualKind, visualKey: String(item.visualKey ?? ''), portraitUrl: String(item.portraitUrl ?? ''), heightMeters: Number.isFinite(item.heightMeters) && item.heightMeters > 0 && item.heightMeters < 10 ? item.heightMeters : undefined }
   })
-  if (renderedNpcs.length > 3 || new Set(renderedNpcs.map(item => item.gameNpcId)).size !== renderedNpcs.length) invalid('Invalid rendered subset')
+  if (renderedNpcs.length > 15 || new Set(renderedNpcs.map(item => item.gameNpcId)).size !== renderedNpcs.length) invalid('Invalid rendered subset')
+  // Optional for older protocol-1 hosts. These are host-map counts, not roster
+  // lengths: hidden/legacy entries can count too, including a sixteenth Z entry.
+  // Bound DOM-dot allocation to that legal host roster, never arbitrary integers.
+  const locationNpcCounts = Object.fromEntries(Object.keys(LOCATION_TO_SCENE).filter(id => !['map', 'tianshanpai'].includes(id)).map(id => [id, 0]))
+  if (input.locationNpcCounts !== undefined) {
+    const counts = input.locationNpcCounts
+    if (!counts || typeof counts !== 'object' || Array.isArray(counts)) invalid('Invalid location NPC counts')
+    for (const key of Reflect.ownKeys(counts)) {
+      if (!own(locationNpcCounts, key) || !Number.isSafeInteger(counts[key]) || counts[key] < 0 || counts[key] > 16) invalid('Invalid location NPC count')
+      locationNpcCounts[key] = counts[key]
+    }
+  }
   const env = input.environment ?? {}
   return freeze({ protocol: PROTOCOL, sessionEpoch: input.sessionEpoch, revision: input.revision, mode: input.mode, logicalPage: String(input.logicalPage ?? 'other'), gameLocationId: String(input.gameLocationId ?? ''), sceneId,
     environment: { season: ['spring', 'summer', 'autumn', 'winter'].includes(env.season) ? env.season : 'winter', hour: Number.isFinite(env.hour) && env.hour >= 0 && env.hour < 24 ? env.hour : 12, timeSource: String(env.timeSource ?? 'dayNightFallback') },
-    residents, renderedNpcs, layoutKey: String(input.layoutKey ?? `${input.sessionEpoch}:${sceneId}:${renderedNpcs.map(n => n.gameNpcId).join(',')}`), visible: input.visible, renderEnabled: input.renderEnabled, interactive: input.interactive, blockReasons: (input.blockReasons ?? []).map(String) })
+    residents, renderedNpcs, locationNpcCounts, layoutKey: String(input.layoutKey ?? `${input.sessionEpoch}:${sceneId}:${renderedNpcs.map(n => n.gameNpcId).join(',')}`), visible: input.visible, renderEnabled: input.renderEnabled, interactive: input.interactive, blockReasons: (input.blockReasons ?? []).map(String) })
 }
 export function applyResult(status, snapshot) { return Object.freeze({ status, epoch: snapshot?.sessionEpoch ?? null, revision: snapshot?.revision ?? null, sceneId: snapshot?.sceneId ?? null }) }
 export function compareVersion(a, b) { return a.sessionEpoch === b.sessionEpoch ? Math.sign(a.revision - b.revision) : Math.sign(a.sessionEpoch - b.sessionEpoch) }

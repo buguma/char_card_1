@@ -7,7 +7,7 @@ import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { configurationHash, loadRunRecord } from '../../scene3d/scripts/run-record.mjs';
-import { verifyRelease } from '../../scene3d/scripts/artifact-utils.mjs';
+import { fileInfo, readJson, safeRelative, verifyRelease } from '../../scene3d/scripts/artifact-utils.mjs';
 import { artifact, assertSessionSafe, diff, exportJson, fixturesRoot, hashFile, importJsonFile, json, launchBrowser, newGameContext, readState, runReadOnlyValidator, saveSessionEvidence, sha256, startGame } from '../../scene3d/scripts/test-support.mjs';
 import { startTestServer } from '../../scene3d/scripts/test-server.mjs';
 import { readBridgeDiagnostics, waitForLatestApplied } from './p1.browser.mjs';
@@ -40,16 +40,33 @@ async function inventory(root, prefix = '', out = {}) {
   }
   return out;
 }
+// Protect the actual publication, not archived integration runs. The separate
+// P0 sourceRoot (currently .scene3d-work/baseline-original/pro) is still required
+// for genuine isolated builds; no obsolete published release is a fixture.
+async function currentPublication(publishRoot = path.join(workspace, 'assets/sect3d')) {
+  const pointerPath = path.join(publishRoot, 'current.json');
+  const pointerInfo = await fileInfo(pointerPath), pointer = await readJson(pointerPath);
+  assert.equal(pointer.schemaVersion, 1, 'Current pointer schema mismatch');
+  safeRelative(pointer.buildId);
+  assert.ok(!pointer.buildId.includes('/'), 'Current buildId must be a single directory');
+  assert.deepEqual(pointer.bridgeProtocol, { min: 1, max: 1 });
+  assert.equal(pointer.manifest, `${pointer.buildId}/manifest.json`);
+  assert.match(pointer.manifestSha256, /^[a-f0-9]{64}$/);
+  const releaseRoot = path.join(publishRoot, pointer.buildId);
+  const { manifest, manifestSha256 } = await verifyRelease(releaseRoot, pointer.buildId, pointer.manifestSha256);
+  const release = await inventory(releaseRoot);
+  assert.equal(release['manifest.json'].sha256, manifestSha256);
+  for (const [name, info] of Object.entries(manifest.files)) assert.deepEqual(release[name], { bytes: info.bytes, sha256: info.sha256 });
+  assert.deepEqual(await fileInfo(pointerPath), pointerInfo, 'Current pointer changed during capture');
+  return { pointer, pointerInfo, release };
+}
 async function protectedInputs() {
   const out = {};
   for (const name of ['index.html', 'module', 'ui', 'assets', 'scene3d/src', 'scene3d/scripts', 'scene3d/package.json', 'scene3d/package-lock.json', 'scene3d/vite.config.js', 'scene3d/node_modules/three']) {
     const filename = path.join(workspace, name);
     out[name] = (await fs.stat(filename)).isDirectory() ? await inventory(filename) : await hashFile(filename);
   }
-  for (const id of ['integration-003', 'integration-005', 'integration-006']) {
-    out[`record:${id}`] = await hashFile(path.join(workspace, '.scene3d-work', id, 'run.json'));
-    out[`archive:${id}`] = await inventory(path.join(workspace, '.scene3d-work', id, 'release'));
-  }
+  out.currentPublication = await currentPublication();
   out.baseline = {};
   out.sourceManifest = await hashFile(sourceManifest); // Frozen build input remains protected even though general docs may change.
   const manifest = await json(sourceManifest);
@@ -334,8 +351,8 @@ async function trajectory(label, version) {
 try {
   before = await protectedInputs(); await artifact(directory, 'protected-before.json', before);
   parallelBefore = await parallelObservations(); await artifact(directory, 'parallel-before.json', parallelBefore);
-  report.mainPointerBefore = await json(path.join(workspace, 'assets/sect3d/current.json'));
-  assert.equal(report.mainPointerBefore.buildId, 'integration-006');
+  report.mainPointerBefore = before.currentPublication.pointer;
+  report.mainPointerHashBefore = before.currentPublication.pointerInfo.sha256;
   await step('independent-normal-cli-builds', prepare);
   await step('publish-a', () => publish('a'));
   server = await cacheServer(); browser = await launchBrowser(); report.browser = await browser.version(); report.baseUrl = server.baseUrl;
@@ -434,7 +451,10 @@ finally {
   try { if (server) { await artifact(directory, 'transport.json', { static: transport, events: server.events, requests: server.requests }); await server.close(); } } catch (error) { report.status = 'FAIL'; report.errors.push(String(error)); }
   try {
     const after = await protectedInputs(); await artifact(directory, 'protected-after.json', after);
-    report.mainPointerAfter = await json(path.join(workspace, 'assets/sect3d/current.json'));
+    report.mainPointerAfter = after.currentPublication.pointer;
+    report.mainPointerHashAfter = after.currentPublication.pointerInfo.sha256;
+    assert.equal(report.mainPointerAfter.buildId, report.mainPointerBefore.buildId, 'Production build changed');
+    assert.equal(report.mainPointerHashAfter, report.mainPointerHashBefore, 'Production pointer bytes changed');
     report.protectedDifferences = diff(after, before).map(row => row.path);
     report.mainInputsUnchanged = !!before && report.protectedDifferences.length === 0;
     assert.ok(report.mainInputsUnchanged, `Protected workspace inputs changed: ${report.protectedDifferences.join(', ')}`);

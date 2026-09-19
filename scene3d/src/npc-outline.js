@@ -3,9 +3,19 @@ import { Color, Vector4 } from 'three'
 // Match the location OutlinePass gold. The contour is painted INSIDE the sprite
 // alpha boundary: no expanded pick quad, extra mesh, texture, or postFX pass.
 export const NPC_OUTLINE_COLOR = '#dba23c'
-export const NPC_OUTLINE_WIDTH = 2
+export const NPC_OUTLINE_WIDTH = 1.5
+
+// Smooth CSS-pixel width: mobile silhouettes remain legible, while a large
+// desktop portrait can use the full gold accent. DPR only scales the uniform.
+export function npcOutlineCssWidth(projectedHeight = 180, viewportWidth = 1280, viewportHeight = 900) {
+  const viewport = Math.max(0, Math.min(viewportWidth, viewportHeight))
+  const screen = Math.max(0, Math.min(1, (viewport - 320) / 580))
+  const portrait = Math.max(0, Math.min(1, (projectedHeight - 40) / 140))
+  return .6 + .9 * Math.min(screen, portrait)
+}
 
 export function installNpcOutline(material) {
+  let cssWidth = NPC_OUTLINE_WIDTH, pixelRatio = 1
   const uniforms = {
     npcOutlineSelected: { value: 0 },
     npcOutlineColor: { value: new Color(NPC_OUTLINE_COLOR) },
@@ -32,7 +42,7 @@ float npcOutlineAlpha(vec2 uv) {
 #include <map_fragment>
 #ifdef USE_MAP
 if (npcOutlineSelected > 0.5) {
-  // Derivatives keep the contour two CSS pixels wide across zoom, DPR,
+  // Derivatives keep the adaptive CSS contour consistent across zoom, DPR,
   // downsampled low quality, resizing, and differently sized atlas frames.
   vec2 dx = dFdx(vMapUv) * npcOutlineWidth;
   vec2 dy = dFdy(vMapUv) * npcOutlineWidth;
@@ -53,7 +63,15 @@ if (npcOutlineSelected > 0.5) {
   material.customProgramCacheKey = () => 'npc-alpha-contour-v1'
   return {
     setSelected(value) { uniforms.npcOutlineSelected.value = value ? 1 : 0 },
-    setPixelRatio(value) { uniforms.npcOutlineWidth.value = NPC_OUTLINE_WIDTH * (Number.isFinite(value) && value > 0 ? value : 1) },
+    setPixelRatio(value) {
+      pixelRatio = Number.isFinite(value) && value > 0 ? value : 1
+      uniforms.npcOutlineWidth.value = cssWidth * pixelRatio
+    },
+    setViewport(projectedHeight, width, height) {
+      cssWidth = npcOutlineCssWidth(projectedHeight, width, height)
+      uniforms.npcOutlineWidth.value = cssWidth * pixelRatio
+    },
+    getStats() { return { cssWidth, bufferWidth: uniforms.npcOutlineWidth.value, pixelRatio } },
     setFrame({ x, y, width, height, sheet }) {
       uniforms.npcOutlineFrame.value.set(x / sheet.width, 1 - (y + height) / sheet.height, (x + width) / sheet.width, 1 - y / sheet.height)
     },

@@ -72,17 +72,28 @@
         const mode = currentMode(), place = currentLocation();
         const eligible = mode === 0 && Object.hasOwn(locations, logicalPage) && (logicalPage === 'map' ? place === 'tianshanpai' : place === logicalPage);
         const residents = [], renderedNpcs = [];
-        let rosterError = false;
-        if (eligible && logicalPage !== 'map' && typeof currentNpcLocations !== 'undefined' && typeof npcs !== 'undefined') {
+        // Match updateLocationHeadcountLabels exactly: count all assigned map entries,
+        // not just visible/known renderables. Legacy Z can contribute a sixteenth dot.
+        const locationNpcCounts = Object.fromEntries(Object.keys(locations).filter(id => id !== 'map').map(id => [id, 0]));
+        if (typeof currentNpcLocations !== 'undefined' && currentNpcLocations && typeof currentNpcLocations === 'object') {
             Object.keys(currentNpcLocations).forEach(id => {
-                if (currentNpcLocations[id] !== place) return;
-                if (!npcs[id] || (typeof npcVisibility !== 'undefined' && npcVisibility[id] === false)) { rosterError = true; return; }
+                const assigned = currentNpcLocations[id];
+                if (Object.hasOwn(locationNpcCounts, assigned)) locationNpcCounts[assigned]++;
+            });
+        }
+        const rosterError = false;
+        if (eligible && logicalPage !== 'map' && typeof currentNpcLocations !== 'undefined' && currentNpcLocations && typeof npcs !== 'undefined' && npcs) {
+            Object.keys(currentNpcLocations).forEach(id => {
+                if (currentNpcLocations[id] !== place || !Object.hasOwn(animated, id) || !Object.hasOwn(npcs, id) || !npcs[id]
+                    || (typeof npcVisibility !== 'undefined' && npcVisibility[id] === false)) return;
                 residents.push({ gameNpcId: id, displayName: npcs[id].name });
             });
-            const selected = displayed.get(place) || [];
-            selected.forEach(id => {
-                if (!residents.some(n => n.gameNpcId === id)) { rosterError = true; return; }
-                renderedNpcs.push({ gameNpcId: id, displayName: npcs[id].name, visualKind: animated[id] ? 'animated' : 'static', visualKey: animated[id] || 'portrait:' + id, portraitUrl: typeof npcPortraits !== 'undefined' ? new URL(npcPortraits[id], document.baseURI).href : '' });
+            // 3D derives the complete legitimate roster without calling displayNpcs,
+            // rerolling its random subset, or modifying the original 2D DOM/save state.
+            const selected = preferences.enabled ? residents.map(n => n.gameNpcId) : displayed.get(place) || [];
+            new Set(selected).forEach(id => {
+                if (!residents.some(n => n.gameNpcId === id)) return;
+                renderedNpcs.push({ gameNpcId: id, displayName: npcs[id].name, visualKind: 'animated', visualKey: animated[id], portraitUrl: typeof npcPortraits !== 'undefined' ? new URL(npcPortraits[id], document.baseURI).href : '' });
             });
         }
         const rect = viewport.getBoundingClientRect();
@@ -94,7 +105,7 @@
         return { protocol: 1, sessionEpoch: epoch, revision, mode, logicalPage, gameLocationId: place,
             sceneId: eligible && !rosterError ? locations[logicalPage] : null,
             environment: { season, hour: time, timeSource: preciseTime?.epoch === epoch ? 'parsed' : 'dayNightFallback' },
-            residents, renderedNpcs, layoutKey: epoch + ':' + logicalPage + ':' + renderedNpcs.map(n => n.gameNpcId).join(','),
+            residents, renderedNpcs, locationNpcCounts, layoutKey: epoch + ':' + logicalPage + ':' + renderedNpcs.map(n => n.gameNpcId).join(','),
             // Own menus lock input, not drawing: location outlines and the focused
             // animated NPC remain alive. Unrelated business overlays still pause both.
             visible, renderEnabled: visible && !blocks.filter(reason => reason !== 'scene-menu').length, interactive: visible && !blocks.length, blockReasons: blocks, rosterError };
@@ -112,6 +123,7 @@
     function closeMenu(restoreView = false) {
         if (!menu) return;
         const element = menu.element, dynamic = menu.kind === 'npc';
+        if (menu.originalLocationHtml !== undefined) element.innerHTML = menu.originalLocationHtml;
         menu = null;
         if (dynamic) element.remove();
         // Location popups are shared with the 2D path: un-mark them
@@ -504,12 +516,19 @@
         // 直接调用 2D 那套函数：同一份 HTML（地点名 + 分割线 + 在场人物 + 前往按钮）
         // 与同一套定位逻辑，2D/3D 才是同一个弹窗。
         const box = anchorRect(anchor);
+        closeMenu();
         showLocationInfo(locationId, { currentTarget: { getBoundingClientRect: () => box } });
         const element = document.getElementById(POPUPS.location);
         // The host function bails out (SLG mode / unknown name) without showing anything;
         // never adopt a popup it did not actually open.
         if (!element || !element.classList.contains('show')) return;
-        adoptPopup('location', { ...captured, anchor }, locationNames[locationId]);
+        const owner = adoptPopup('location', { ...captured, anchor }, locationNames[locationId]);
+        // Only this 3D-owned opening changes the subset hint. Restore shared markup
+        // on close; the host's next 2D opening still uses its untouched helper.
+        if (owner && element.innerHTML.includes('人，随机显示3人）')) {
+            owner.originalLocationHtml = element.innerHTML;
+            element.innerHTML = element.innerHTML.replace('人，随机显示3人）', '人，全部显示）');
+        }
     }
     function showNpcInfoAtAnchor(npcId, locationId, anchor, event) {
         const captured = event || { epoch, revision, gameNpcId: npcId, anchor };
@@ -539,10 +558,10 @@
     function liveNpcAllowed(npcId, locationId) {
         return preferences.enabled && currentMode() === 0 && last?.visible && currentLocation() === locationId
             && document.querySelector('#main-viewport > .scene.active')?.id === locationId + '-scene'
-            && typeof npcs !== 'undefined' && !!npcs[npcId]
-            && typeof currentNpcLocations !== 'undefined' && currentNpcLocations[npcId] === locationId
-            && (typeof npcVisibility === 'undefined' || npcVisibility[npcId] !== false)
-            && (displayed.get(locationId) || []).includes(npcId);
+            && Object.hasOwn(animated, npcId)
+            && typeof npcs !== 'undefined' && !!npcs && Object.hasOwn(npcs, npcId) && !!npcs[npcId]
+            && typeof currentNpcLocations !== 'undefined' && !!currentNpcLocations && Object.hasOwn(currentNpcLocations, npcId) && currentNpcLocations[npcId] === locationId
+            && (typeof npcVisibility === 'undefined' || npcVisibility[npcId] !== false);
     }
     function onEvent(event) {
         if (!last || event.epoch !== epoch) return;

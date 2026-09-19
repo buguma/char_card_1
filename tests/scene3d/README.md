@@ -1,5 +1,17 @@
 # scene3d 验收测试底座
 
+## 015 NPC 与人数标记回归
+
+```powershell
+node tests/scene3d/npc-focus.browser.mjs E:\JJBurst\git\.scene3d-work\npc-focus-current
+node tests/scene3d/npc-roster.browser.mjs E:\JJBurst\git\.scene3d-work\npc-roster-current
+node tests/scene3d/location-labels.browser.mjs E:\JJBurst\git\.scene3d-work\labels-current
+```
+
+输出目录必须是新的绝对路径。默认校验当前发布，不依赖旧发布目录。新增 roster 回归覆盖古风桌面/扁平手机：2D 三人 DOM 和业务 RNG 不变、3D 四人/十五人真实模型、第 4 人原生交互，以及主地图 0/4/15 白点与 2D 的计算样式一致。focus 回归在原生 pointerup 采样角度基准，验证聚焦与取消全过程不旋转；小屏包含 DPR 3 均衡画质。当前四组 focus、两组 roster 和 32 项地名检查均通过，证据分别为 `.scene3d-work/npc-focus015-final-02/`、`npc-roster015-final-02/`、`labels015-final-01/`。
+
+> **当前发布资源约定**：`assets/sect3d/` 只需保留 `current.json` 及其完整引用版本（目前为 `integration-015`）。真实模型测试和通用浏览器入口跟随并校验当前指针，不再依赖已删除的 003/005/006/013 发布目录。缓存/回退专项仍在隔离目录正常构建 A/B 版本，仍需其声明的原始资源基线。下方按日期记录的旧版本号及验收结果属于历史记录，不表示现在必须保留这些旧发布。维护与恢复方式见 `开发文档/3D整合/发布资源维护.md`。
+
 本目录不是发布资源。测试通过真实 `index.html`，从 `scene3d/scripts` 解析局部依赖；不修改宿主源码、不连接真实 API、不复用用户 profile。纯协议/3D测试随实现追加，不能把当前基础设施单测等同于P1–P6验收。
 
 ## 前置条件与命令

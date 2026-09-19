@@ -7,7 +7,7 @@ import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { configurationHash, loadRunRecord } from '../../scene3d/scripts/run-record.mjs';
-import { verifyRelease } from '../../scene3d/scripts/artifact-utils.mjs';
+import { fileInfo, readJson, safeRelative, verifyRelease } from '../../scene3d/scripts/artifact-utils.mjs';
 import { artifact, assertSessionSafe, exportJson, fixturesRoot, hashFile, importJsonFile, json, launchBrowser, newGameContext, readState, runReadOnlyValidator, saveSessionEvidence, startGame } from '../../scene3d/scripts/test-support.mjs';
 import { startTestServer } from '../../scene3d/scripts/test-server.mjs';
 import { readBridgeDiagnostics, setEnabled, waitForLatestApplied } from './p1.browser.mjs';
@@ -15,7 +15,6 @@ import { businessProjection, enterFromBuildingMenu, studyWithStream } from './p2
 
 const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const options = { older: 'p6-history-a', newer: 'p6-current-b', runId: `p6-rollback-${Date.now()}-${randomUUID().slice(0, 8)}` };
-const protectedHistoryIds = ['integration-003', 'integration-005'];
 const invalidImportedAttempts = ['p6-rollback-1789223026338-c5e08ed8', 'p6-rollback-1789223291513-f9b9a0fe', 'p6-rollback-1789223574325-4e9d83d6'];
 const seenOptions = new Set();
 for (const argument of process.argv.slice(2)) {
@@ -52,6 +51,26 @@ async function inventory(root, prefix = '', output = {}) {
   }
   return output;
 }
+// Protect the actual publication, not archived integration runs. The separate
+// P0 sourceRoot (.scene3d-work/baseline-original/pro) remains a prerequisite for
+// genuine isolated builds; no obsolete published release is a fixture.
+async function currentPublication(publishRoot = path.join(workspace, 'assets/sect3d')) {
+  const pointerPath = path.join(publishRoot, 'current.json');
+  const pointerInfo = await fileInfo(pointerPath), pointer = await readJson(pointerPath);
+  assert.equal(pointer.schemaVersion, 1, 'Current pointer schema mismatch');
+  safeRelative(pointer.buildId);
+  assert.ok(!pointer.buildId.includes('/'), 'Current buildId must be a single directory');
+  assert.deepEqual(pointer.bridgeProtocol, { min: 1, max: 1 });
+  assert.equal(pointer.manifest, `${pointer.buildId}/manifest.json`);
+  assert.match(pointer.manifestSha256, /^[a-f0-9]{64}$/);
+  const releaseRoot = path.join(publishRoot, pointer.buildId);
+  const { manifest, manifestSha256 } = await verifyRelease(releaseRoot, pointer.buildId, pointer.manifestSha256);
+  const release = await inventory(releaseRoot);
+  assert.equal(release['manifest.json'].sha256, manifestSha256);
+  for (const [name, info] of Object.entries(manifest.files)) assert.deepEqual(release[name], { bytes: info.bytes, sha256: info.sha256 });
+  assert.deepEqual(await fileInfo(pointerPath), pointerInfo, 'Current pointer changed during capture');
+  return { pointer, pointerInfo, release };
+}
 async function protectedInputs() {
   const output = {};
   // All production release bytes and host/runtime/scripts; original APK files are
@@ -72,10 +91,7 @@ async function protectedInputs() {
   output.sourceManifest = await hashFile(sourceManifest);
   output.sourceBaseline = {};
   for (const name of Object.keys((await json(sourceManifest)).files).sort()) output.sourceBaseline[name] = await hashFile(path.join(sourceRoot, name));
-  for (const id of protectedHistoryIds) {
-    output[`history:${id}`] = await hashFile(path.join(workspace, '.scene3d-work', id, 'run.json'));
-    output[`archive:${id}`] = await inventory(path.join(workspace, '.scene3d-work', id, 'release'));
-  }
+  output.currentPublication = await currentPublication();
   return output;
 }
 async function record(runId, buildId) {

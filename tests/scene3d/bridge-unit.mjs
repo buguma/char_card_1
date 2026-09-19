@@ -12,6 +12,7 @@ function host({ mode = 0, stored = null } = {}) {
   class Element {
     constructor(id = '') { this.id = id; this.hidden = false; this.children = []; this.dataset = {}; this.style = {}; this.clientWidth = 500; this.clientHeight = 300; this.classes = new Set(); this.classList = { add: (...names) => names.forEach(n => this.classes.add(n)), remove: (...names) => names.forEach(n => this.classes.delete(n)), contains: n => this.classes.has(n) }; }
     append(...nodes) { this.children.push(...nodes); this.firstChild = this.children[0]; }
+    appendChild(node) { this.append(node); return node; }
     setAttribute() {} removeAttribute() {} addEventListener() {} remove() {} closest() { return null; }
     getBoundingClientRect() { return { left: 10, top: 20, width: 500, height: 300, right: 510, bottom: 320 }; }
     getClientRects() { return this.hidden ? [] : [this.getBoundingClientRect()]; }
@@ -32,7 +33,7 @@ function host({ mode = 0, stored = null } = {}) {
   const counts = { fetch: 0, rng: 0, sync: 0, writes: 0 };
   const sandbox = {
     document, location: { protocol: 'http:' }, innerWidth: 500, URL, TextDecoder, Uint8Array,
-    queueMicrotask, setTimeout, clearTimeout, console: { warn() {} },
+    queueMicrotask, setTimeout, clearTimeout, console: { warn() {}, log() {} },
     MutationObserver: class { observe() {} }, addEventListener() {},
     matchMedia: () => ({ matches: true }), getComputedStyle: () => ({ display: 'block', visibility: 'visible' }),
     localStorage: { getItem: () => stored, setItem() { counts.writes++; } },
@@ -74,7 +75,7 @@ test('enabled Gal cold-start and special pages do not request 3D module/assets',
   game.bridge.notify('attributes'); await drain();
   assert.equal(game.bridge.getDiagnostics().snapshot.sceneId, null); assert.equal(game.counts.fetch, 0);
 });
-test('hidden-but-present roster degrades; exact parsed time is epoch scoped', async () => {
+test('hidden-but-present NPC is excluded without degrading valid roster; exact parsed time is epoch scoped', async () => {
   const game = host(); game.bridge.start();
   game.bridge.publishNpcs('cangjingge', ['B']); game.bridge.captureTime('03:30'); await drain();
   assert.equal(game.bridge.getDiagnostics().snapshot.environment.hour, 3.5);
@@ -83,8 +84,10 @@ test('hidden-but-present roster degrades; exact parsed time is epoch scoped', as
   game.bridge.afterRestore('test-restore', true); await drain();
   assert.equal(game.bridge.getDiagnostics().snapshot.environment.hour, 14);
   game.run('npcVisibility.B=false'); game.bridge.notify('fixture-hidden'); await drain();
-  assert.equal(game.bridge.getDiagnostics().snapshot.rosterError, true);
-  assert.equal(game.bridge.getDiagnostics().snapshot.sceneId, null);
+  assert.equal(game.bridge.getDiagnostics().snapshot.rosterError, false);
+  assert.equal(game.bridge.getDiagnostics().snapshot.sceneId, 'library');
+  assert.deepEqual(Array.from(game.bridge.getDiagnostics().snapshot.residents, n => n.gameNpcId), ['A']);
+  assert.equal(game.bridge.getDiagnostics().snapshot.locationNpcCounts.cangjingge, 2);
   assert.equal(game.counts.rng, 0); assert.equal(game.counts.sync, 0);
 });
 test('business input lock applies even without a visible modal', async () => {
@@ -102,6 +105,71 @@ test('generation tokens nest and independent releases do not unlock other owners
   game.bridge.setBusy('main', false); await drain();
   assert.equal(game.bridge.getDiagnostics().snapshot.blockReasons.includes('generation:main'), false);
   assert.equal(game.bridge.getDiagnostics().snapshot.blockReasons.includes('generation:special'), true);
+});
+
+test('original random 2D three-person DOM survives 3D all-residents and return without business RNG/save changes', async () => {
+  const game = host();
+  const container = game.document.createElement('div'); game.elements.set('cangjingge-npcs', container);
+  game.run("for (const id of 'CDEFGHIJKLMNO') { npcs[id]={name:id}; currentNpcLocations[id]='cangjingge'; npcVisibility[id]=true; npcPortraits[id]='img/'+id+'.webp'; }");
+  game.run(helpersSource.slice(helpersSource.indexOf('function getNpcsAtLocation(location)'), helpersSource.indexOf('// 立绘像素检测的离屏canvas缓存')));
+  game.bridge.start(); game.run("displayNpcs('cangjingge')"); await drain();
+  const originalNodes = [...container.children], ids = originalNodes.map(node => node.dataset.npcId);
+  assert.equal(ids.length, 3); assert.ok(game.counts.rng > 0, 'real host display consumed its original RNG');
+  const rng = game.counts.rng, business = game.run('JSON.stringify({currentNpcLocations,npcs,npcVisibility})');
+  assert.deepEqual(Array.from(game.bridge.getDiagnostics().snapshot.renderedNpcs, n => n.gameNpcId), ids);
+  game.bridge.setPreference({ enabled: true }); await drain();
+  assert.deepEqual(Array.from(game.bridge.getDiagnostics().snapshot.renderedNpcs, n => n.gameNpcId), [...'ABCDEFGHIJKLMNO']);
+  assert.equal(game.bridge.getDiagnostics().snapshot.locationNpcCounts.cangjingge, 15);
+  assert.deepEqual(container.children, originalNodes, 'same three original DOM nodes while 3D is enabled');
+  game.bridge.setPreference({ enabled: false }); await drain();
+  assert.deepEqual(Array.from(game.bridge.getDiagnostics().snapshot.renderedNpcs, n => n.gameNpcId), ids);
+  assert.deepEqual(container.children, originalNodes);
+  assert.equal(game.counts.rng, rng); assert.equal(game.counts.sync, 0); assert.equal(game.counts.writes, 2, 'only explicit presentation preference writes');
+  assert.equal(game.run('JSON.stringify({currentNpcLocations,npcs,npcVisibility})'), business);
+});
+
+test('3D keeps valid residents while excluding hidden, absent, invalid and legacy placeholder IDs', async () => {
+  const game = host({ stored: '{"enabled":true}' });
+  game.run("npcs.C={name:'C'}; npcs.D={name:'D'}; currentNpcLocations.C='cangjingge'; currentNpcLocations.D='cangjingge'; currentNpcLocations.Z='cangjingge'; currentNpcLocations.Q='cangjingge'; npcs.Q={name:'invalid'}; npcVisibility.B=false;");
+  game.bridge.publishNpcs('cangjingge', ['B', 'Z', 'Q']); game.bridge.start(); await drain();
+  const state = game.bridge.getDiagnostics().snapshot;
+  assert.deepEqual(Array.from(state.renderedNpcs, n => n.gameNpcId), ['A', 'C', 'D']);
+  assert.equal(state.rosterError, false); assert.equal(state.visible, true); assert.equal(state.sceneId, 'library');
+  assert.equal(state.locationNpcCounts.cangjingge, 6, '2D dot count does not filter visibility or IDs');
+  assert.equal(game.counts.rng, 0); assert.equal(game.counts.sync, 0);
+});
+
+test('headcounts match the original 2D helper for 0/1/4/15/16 across main, mode, and visibility notifications', async () => {
+  const game = host();
+  const legacyCounts = () => {
+    game.run(helpersSource.slice(helpersSource.indexOf('function updateLocationHeadcountLabels()'), helpersSource.indexOf('// 暴露到全局（供页面中其他脚本调用）')));
+    game.run('updateLocationHeadcountLabels()');
+    return Object.fromEntries([...game.elements].filter(([, el]) => el.people).map(([id, el]) => [id, el.people.children.length]));
+  };
+  for (const id of ['yanwuchang','cangjingge','huofang','houshan','yishiting','tiejiangpu','nandizi','nvdizi','shanmen','gongtian','danfang']) {
+    const el = game.document.createElement('div'), people = game.document.createElement('div'), divider = game.document.createElement('div');
+    Object.defineProperty(people, 'innerHTML', { set() { this.children = []; } });
+    el.people = people; el.querySelector = selector => selector === '.location-people' ? people : divider; game.elements.set(id, el);
+  }
+  game.elements.get('cangjingge-scene').classes.delete('active'); game.elements.get('map-scene').classes.add('active');
+  game.run("userLocation='tianshanpai'; currentNpcLocations={}"); game.bridge.start(); await drain();
+  let revision = game.bridge.getDiagnostics().revision;
+  for (const count of [0, 1, 4, 15, 16]) {
+    game.run(`currentNpcLocations={}; for (const id of 'ABCDEFGHIJKLMNOZ'.slice(0,${count})) currentNpcLocations[id]='cangjingge'; npcVisibility.A=false;`);
+    game.bridge.notify('count-change'); await drain();
+    const state = game.bridge.getDiagnostics().snapshot;
+    assert.equal(state.residents.length, 0); assert.equal(state.locationNpcCounts.cangjingge, count);
+    assert.deepEqual(JSON.parse(JSON.stringify(state.locationNpcCounts)), legacyCounts());
+    if (count) assert.ok(state.revision > revision, 'headcount-only change advances version');
+    revision = state.revision;
+  }
+  game.run('GameMode=1'); game.document.hidden = true; game.bridge.notify('mode-hidden'); await drain();
+  assert.equal(game.bridge.getDiagnostics().snapshot.locationNpcCounts.cangjingge, 16);
+  game.run("currentNpcLocations.A='none'; currentNpcLocations.Z='shanmen'"); game.bridge.notify('settlement'); await drain();
+  assert.deepEqual(JSON.parse(JSON.stringify(game.bridge.getDiagnostics().snapshot.locationNpcCounts)), legacyCounts());
+  assert.equal(game.bridge.getDiagnostics().snapshot.locationNpcCounts.cangjingge, 14);
+  assert.equal(game.bridge.getDiagnostics().snapshot.locationNpcCounts.shanmen, 1);
+  assert.equal(game.counts.rng, 0); assert.equal(game.counts.sync, 0); assert.equal(game.counts.writes, 0);
 });
 
 // Eventful DOM harness for host-owned popups. Unlike the projection-only host
@@ -193,18 +261,53 @@ function menuHost(t, bridgeSource = source) {
   vm.runInContext(legacyLocationPopup, context);
   const marker = '    window.GameSceneBridge =';
   assert.ok(bridgeSource.includes(marker));
-  vm.runInContext(bridgeSource.replace(marker, '    window.__menuTest = { install() { view = renderer; preferences.enabled = true; } };\n' + marker), context);
+  vm.runInContext(bridgeSource.replace(marker, '    window.__menuTest = { install() { view = renderer; preferences.enabled = true; }, emit: onEvent };\n' + marker), context);
   const bridge = sandbox.GameSceneBridge;
   bridge.start(); sandbox.__menuTest.install(); bridge.publishNpcs('cangjingge', ['A']);
   t.after(() => { observers.clear(); timers.clear(); documentListeners.clear(); });
   return {
     bridge, renderer, document, elements, dispatches,
+    emit: event => sandbox.__menuTest.emit(event),
     run: code => vm.runInContext(code, context),
     flushTimers(ms) { for (const [id, timer] of [...timers]) if (timer.ms <= ms) { timers.delete(id); timer.fn(); } },
     openLocation() { bridge.showLocationInfoAtAnchor('cangjingge', { left: 150, top: 100, width: 20, height: 20 }); return elements.get('location-info-popup'); },
     openNpc() { bridge.showNpcInfoAtAnchor('A', 'cangjingge', { left: 200, top: 100, width: 40, height: 87 }); return elements.get('main-viewport').children.find(node => node.dataset.scene3dOwned === 'menu'); },
   };
 }
+for (const change of ['none', 'moved', 'hidden']) test(`fourth resident native intent/action is live-validated: ${change}`, async t => {
+  const game = menuHost(t);
+  game.run("for (const id of 'BCD') { npcs[id]={name:id,description:'resident'}; currentNpcLocations[id]='cangjingge'; npcVisibility[id]=true; npcFavorability[id]=0; } var nativeActions=[]; function npcAction(id,verb){nativeActions.push([id,verb])}");
+  game.bridge.publishNpcs('cangjingge', ['A','B','C']); await drain();
+  const state = game.bridge.getDiagnostics().snapshot;
+  assert.deepEqual(Array.from(state.renderedNpcs, n => n.gameNpcId), ['A','B','C','D']);
+  game.emit({ type:'npcIntent', epoch:state.sessionEpoch, revision:state.revision, gameNpcId:'D', anchor:{left:200,top:100,width:40,height:87} });
+  const menu = game.elements.get('main-viewport').children.find(node => node.dataset.scene3dOwned === 'menu');
+  assert.ok(menu, 'unpublished fourth resident opens its native-action menu');
+  await drain();
+  if (change === 'moved') game.run("currentNpcLocations.D='shanmen'");
+  if (change === 'hidden') game.run('npcVisibility.D=false');
+  const action = menu.children[0].children[2].children.find(button => button.textContent === '互动');
+  for (const listener of action.listeners.get('click')) listener({});
+  assert.deepEqual(JSON.parse(game.run('JSON.stringify(nativeActions)')), change === 'none' ? [['D','互动']] : []);
+  if (change !== 'none') {
+    game.document.dispatch('pointerdown', {target:game.elements.get('outside-control')}); await drain();
+    const now = game.bridge.getDiagnostics().snapshot;
+    game.emit({type:'npcIntent',epoch:now.sessionEpoch,revision:now.revision,gameNpcId:'D'});
+    assert.equal(game.elements.get('main-viewport').children.some(node => node.dataset.scene3dOwned === 'menu'), false);
+  }
+});
+
+test('only owned 3D location hint says all residents; closing restores original 2D popup contract', async t => {
+  const game = menuHost(t);
+  game.run("getNpcsAtLocation=()=>[...'ABCD'].map(name=>({name}));"); await drain();
+  const popup = game.openLocation(); await drain();
+  assert.match(popup.innerHTML, /共4人，全部显示/); assert.doesNotMatch(popup.innerHTML, /随机显示3人/);
+  game.document.dispatch('pointerdown', {target:game.elements.get('outside-control')}); await drain();
+  assert.match(popup.innerHTML, /随机显示3人/);
+  game.run("showLocationInfo('cangjingge',{currentTarget:document.getElementById('map-scene')})");
+  assert.match(popup.innerHTML, /随机显示3人/); assert.equal(popup.dataset.scene3dOwned, undefined);
+});
+
 function assertMenuLock(game, expected) {
   const snapshot = game.bridge.getDiagnostics().snapshot;
   assert.equal(snapshot.blockReasons.includes('scene-menu'), expected, 'scene-menu lock');

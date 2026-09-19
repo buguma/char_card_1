@@ -69,7 +69,7 @@ export function frameAt(visual, elapsedMs) {
 
 function copySnapshot(input = {}) {
   const rendered = input.renderedNpcs ?? []
-  if (!Array.isArray(rendered) || rendered.length > 3) throw fail('NPC_SUBSET_INVALID')
+  if (!Array.isArray(rendered) || rendered.length > 15) throw fail('NPC_SUBSET_INVALID')
   const residents = new Map((input.residents ?? []).map(npc => [npc.gameNpcId, npc.displayName]))
   const ids = new Set()
   const npcs = rendered.map(npc => {
@@ -184,7 +184,9 @@ function browserImageLoader(context, fetcher) {
  * Presentation option: npcShadows (boolean, default true), independent of sun/quality.
  * setNpcShadows changes only this instance and never reads/writes storage.
  * Missing heightMeters uses CSV-derived manifest.height * DEFAULT_NPC_SCENE_SCALE;
- * an explicit valid heightMeters remains an effective world-space override.
+ * an explicit valid heightMeters overrides that authored world-space height.
+ * Crowded >3 rosters may apply one uniform placementScale only after full-size
+ * packing fails. Base heights remain authored; diagnostics expose effective sizes.
  * Test seams: fetch, loadImage(url,{signal,maxTextureSize,maxPixels}), placement.
  * A custom loadImage returns owned {image,width,height,alpha,alphaWidth,alphaHeight,dispose?}.
  */
@@ -222,7 +224,9 @@ export function createNpcController(context) {
   }
   function trim(keep = null) {
     for (const entry of [...cache.values()]) if (!entry.refs && keep && !keep.has(entry.key)) evict(entry)
-    while (cache.size > 6) {
+    // Fifteen active residents plus a small warm tail; refs protect every live
+    // atlas (including multi-sheet assets) from LRU eviction.
+    while (cache.size > 18) {
       const victim = [...cache.values()].filter(entry => !entry.refs).sort((a, b) => a.used - b.used)[0]
       if (!victim) throw fail('NPC_CACHE_PIN_LIMIT')
       evict(victim)
@@ -389,14 +393,14 @@ export function createNpcController(context) {
     const y = Math.max(0, Math.min(image.alphaHeight - 1, Math.floor((1 - uv.y) * image.alphaHeight)))
     return image.alpha?.[y * image.alphaWidth + x] >= ALPHA
   }
-  function buildCard(npc, asset, foot) {
+  function buildCard(npc, asset, foot, placementScale = 1) {
     const material = new THREE.MeshBasicMaterial({ alphaTest: .35, depthTest: true, depthWrite: true, side: THREE.DoubleSide })
     const geometry = new THREE.PlaneGeometry(1, 1).translate(0, .5, 0)
     const card = new THREE.Mesh(geometry, material)
     card.userData.outline = installNpcOutline(material)
     card.name = `Scene3D_NPC_${npc.gameNpcId}`
     card.castShadow = card.receiveShadow = false // Alpha cards must not cast rectangular real shadows.
-    Object.assign(card.userData, { gameNpcId: npc.gameNpcId, asset, heightMeters: npcEffectiveHeight(npc.heightMeters, asset.visual.height), foot: foot.toArray(), frame: -1, scene3dNpc: true })
+    Object.assign(card.userData, { gameNpcId: npc.gameNpcId, asset, placementScale, heightMeters: npcEffectiveHeight(npc.heightMeters, asset.visual.height) * placementScale, foot: foot.toArray(), frame: -1, scene3dNpc: true })
     card.position.copy(root.worldToLocal(foot.clone()))
     card.raycast = function(ray, intersections) {
       const hits = []; THREE.Mesh.prototype.raycast.call(this, ray, hits)
@@ -413,15 +417,20 @@ export function createNpcController(context) {
     const parentScale = root.getWorldScale(new THREE.Vector3())
     const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion()))
     const facing = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(forward.x, forward.z))
+    const viewport = renderer.domElement.getBoundingClientRect()
     const night = snapshot.environment.hour < 6 || snapshot.environment.hour >= 19.5
     for (const card of cards) {
       const npc = snapshot.npcs.find(n => n.gameNpcId === card.userData.gameNpcId)
       if (!npc) continue
-      card.userData.heightMeters = npcEffectiveHeight(npc.heightMeters, card.userData.asset.visual.height)
+      card.userData.heightMeters = npcEffectiveHeight(npc.heightMeters, card.userData.asset.visual.height) * card.userData.placementScale
       const size = cardSize(card.userData.asset.visual, camera, card.userData.heightMeters)
       card.quaternion.copy(parentQuaternion).multiply(facing)
       card.scale.set(size.width / Math.max(.0001, Math.abs(parentScale.x)), size.height / Math.max(.0001, Math.abs(parentScale.y)), 1 / Math.max(.0001, Math.abs(parentScale.z)))
       card.material.color.set(night ? '#aab8d5' : '#ffffff')
+      card.updateWorldMatrix(true, false)
+      const foot = new THREE.Vector3(0, 0, 0).applyMatrix4(card.matrixWorld).project(camera)
+      const head = new THREE.Vector3(0, 1, 0).applyMatrix4(card.matrixWorld).project(camera)
+      card.userData.outline.setViewport(Math.abs(head.y - foot.y) * viewport.height / 2, viewport.width, viewport.height)
       card.userData.outline.setPixelRatio(renderer.getPixelRatio?.() ?? 1)
       setFrame(card, frameAt(card.userData.asset.visual, elapsed))
     }
@@ -479,7 +488,7 @@ export function createNpcController(context) {
         if (!floor) throw fail('NPC_FLOOR_MISSING')
         const descriptors = loaded.map(({ npc, asset }) => ({ ...asset.visual, height: npcEffectiveHeight(npc.heightMeters, asset.visual.height) }))
         placements = (context.placement || placeNpcs)(floor, descriptors, camera, seededRandom(layoutSeed(`${next.layoutKey}:${nextId}`)))
-        if (placements.length !== loaded.length || !placements.every(p => p.point?.isVector3 && p.point.toArray().every(Number.isFinite))) throw fail('NPC_PLACEMENT_INVALID')
+        if (placements.length !== loaded.length || !placements.every(p => p.point?.isVector3 && p.point.toArray().every(Number.isFinite) && (p.scale === undefined || (Number.isFinite(p.scale) && p.scale > 0 && p.scale <= 1)))) throw fail('NPC_PLACEMENT_INVALID')
       } catch (error) {
         for (const item of loaded) fallbacks.push({ gameNpcId: item.npc.gameNpcId, reason: error.code || error.message || 'NPC_FLOOR_CROWDED' })
         loaded.length = 0
@@ -491,7 +500,7 @@ export function createNpcController(context) {
         contactShadows = createNpcContactShadows({ parent: group, floor })
         counters.shadowGroupsCreated++
       }
-      for (let i = 0; i < loaded.length; i++) buildCard(loaded[i].npc, loaded[i].asset, placements[i].point)
+      for (let i = 0; i < loaded.length; i++) buildCard(loaded[i].npc, loaded[i].asset, placements[i].point, placements[i].scale ?? 1)
       // Preserve the host's selected ordering, including asset/placement fallbacks.
       fallbacks.sort((a, b) => selected.findIndex(n => n.gameNpcId === a.gameNpcId) - selected.findIndex(n => n.gameNpcId === b.gameNpcId))
       showFallback(token); tick(0, 0)
@@ -567,7 +576,8 @@ export function createNpcController(context) {
     const npcShadows = Object.freeze({ enabled: shadowsEnabled, mode: 'soft-contact', count: shadows.residents.length,
       visibleCount: shadows.residents.filter(shadow => shadow.visible).length, shadowMapPasses: 0, ...shadows })
     return Object.freeze({ disposed, generation, sceneId, cards: cards.length, fallbacks: Object.freeze(fallbacks.map(n => Object.freeze({ ...n }))),
-      cachedAssets: cache.size, pinnedAssets: [...cache.values()].filter(entry => entry.refs > 0).length, pendingLoads: pendingControllers.size,
+      placementScale: cards[0]?.userData.placementScale ?? 1,
+      cacheBudget: 18, residentLimit: 15, cachedAssets: cache.size, pinnedAssets: [...cache.values()].filter(entry => entry.refs > 0).length, pendingLoads: pendingControllers.size,
       alphaBytes: [...cache.values()].reduce((total, entry) => total + (entry.asset?.sheets.reduce((sum, sheet) => sum + (sheet.image.alpha?.byteLength || 0), 0) || 0), 0),
       fallbackListeners: buttons.length, elapsedMs: elapsed, defaultSceneScale: DEFAULT_NPC_SCENE_SCALE, npcShadows, ...counters,
       outline: Object.freeze({ mode: 'alpha-contour', color: NPC_OUTLINE_COLOR, selectedNpcId, count: Number(selectedNpcId !== null) }),
@@ -576,7 +586,8 @@ export function createNpcController(context) {
         // the last rendered matrices; never tick/update scene state for sampling.
         const bounds = anchor(card)
         return Object.freeze({ gameNpcId: card.userData.gameNpcId, frame: card.userData.frame,
-          height: card.userData.heightMeters, baseHeight: card.userData.asset.visual.height, width: card.scale.x, foot: Object.freeze([...card.userData.foot]),
+          height: card.userData.heightMeters, baseHeight: card.userData.asset.visual.height, placementScale: card.userData.placementScale, width: card.scale.x, foot: Object.freeze([...card.userData.foot]),
+          outline: Object.freeze(card.userData.outline.getStats()),
           anchor: bounds ? Object.freeze(bounds) : null })
       })) })
   }

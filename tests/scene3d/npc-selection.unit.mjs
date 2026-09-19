@@ -6,9 +6,9 @@ import { pathToFileURL } from 'node:url'
 import path from 'node:path'
 import vm from 'node:vm'
 import { advanceNpcCameraTween } from '../../scene3d/src/runtime.js'
-import { frameNpcCamera } from '../../scene3d/src/npc-focus.js'
+import { frameNpcCamera, clearNpcCameraDamping, restoreNpcRoomCamera } from '../../scene3d/src/npc-focus.js'
 import { createNpcController } from '../../scene3d/src/npcs.js'
-import { installNpcOutline, NPC_OUTLINE_COLOR } from '../../scene3d/src/npc-outline.js'
+import { installNpcOutline, NPC_OUTLINE_COLOR, npcOutlineCssWidth } from '../../scene3d/src/npc-outline.js'
 
 const require = createRequire(new URL('../../scene3d/package.json', import.meta.url))
 const THREE = await import(pathToFileURL(path.join(path.dirname(require.resolve('three')), 'three.module.js')).href)
@@ -47,15 +47,18 @@ function runtimeFixture({ reducedMotion = false } = {}) {
     schedule() { context.syncInput() }, wakeWaiters() {}, invalidateNpc() {}, projectEnvironment() {}, async initialize() {},
     normalizeSnapshot: value => value, compareVersion: (a, b) => a.sessionEpoch - b.sessionEpoch || a.revision - b.revision, applyResult: status => ({ status }),
     pixelRatio: () => 1, emit(type, detail) { events.push({ type, ...detail }) }, emitError(error) { throw error },
-    frameNpcCamera, advanceNpcCameraTween,
+    frameNpcCamera, advanceNpcCameraTween, clearNpcCameraDamping, restoreNpcRoomCamera,
+    locationLabels: null,
   }
   vm.createContext(context)
   const names = ['npcMenuOnlyLock', 'awaitingNpcMenuUnlock', 'clearSelection', 'advanceNpcViewReturn', 'advanceNpcFocus', 'emitNpcIntent', 'positionCamera', 'fit', 'resize', 'canInteract', 'cancelNavigation', 'setVisible', 'setRenderEnabled', 'setInteractionEnabled', 'applyState']
   vm.runInContext(names.map(name => functions.get(name)).join('\n'), context)
   context.positionCamera(context.activeRecord); context.fit()
   const canonical = view(context)
-  // A pre-click rotated/zoomed view must not become the return destination.
-  camera.position.set(-40, 17, 12); controls.target.set(-3, 1, 8); camera.zoom = 2.8
+  // Return restores initial target/zoom, NOT the initial camera direction.
+  const offset = new THREE.Vector3().setFromSphericalCoords(camera.position.distanceTo(controls.target), Math.PI / 3, -1.7)
+  controls.target.set(-3, 1, 8); camera.position.copy(controls.target).add(offset); camera.zoom = 2.8
+  canonical.position = new THREE.Vector3(...canonical.target).add(offset).toArray()
   camera.lookAt(controls.target); camera.updateProjectionMatrix(); camera.updateMatrixWorld(true)
   const anchor = { space: 'client-css-px', left: 1, top: 2, width: 30, height: 40 }
   const focus = (id = 'A') => {
@@ -65,7 +68,7 @@ function runtimeFixture({ reducedMotion = false } = {}) {
   return { c: context, canonical, focus, anchor, selections, postSelections, events }
 }
 
-test('NPC dismissal removes contour immediately and smoothly returns to canonical room view, not pre-click orbit', () => {
+test('NPC dismissal removes contour and returns initial room target/zoom preserving current orbit', () => {
   const f = runtimeFixture(); f.focus()
   const focused = view(f.c)
   assert.equal(f.selections.at(-1), 'A')
@@ -180,6 +183,72 @@ test('a new NPC focus supersedes camera return and owns the only selected contou
   assert.equal(f.events.at(-1).gameNpcId, 'B')
 })
 
+test('host counts apply synchronously even while main-map menu rendering is paused', async () => {
+  const f = runtimeFixture(), counts = []
+  f.c.locationLabels = { setCounts(value) { counts.push(value) } }
+  f.c.activeRecord.id = 'main'; f.c.latest.sceneId = 'main'
+  const locationNpcCounts = { huofang: 4, cangjingge: 15 }
+  const applied = f.c.applyState({ ...f.c.latest, revision: 2, renderEnabled: false, interactive: false, blockReasons: ['scene-menu'], locationNpcCounts })
+  assert.equal(counts.length, 1); assert.equal(counts[0], locationNpcCounts)
+  await applied
+})
+
+test('noncanonical focus, resize and return preserve the entire viewing offset at every tween sample', () => {
+  const f = runtimeFixture(), c = f.c
+  const offset = c.camera.position.clone().sub(c.controls.target)
+  const sameOffset = () => c.camera.position.clone().sub(c.controls.target).toArray().forEach((n, i) => close(n, offset.getComponent(i)))
+  c.emitNpcIntent('A', f.anchor); sameOffset()
+  c.advanceNpcFocus(0); c.advanceNpcFocus(210); sameOffset()
+  c.container.clientWidth = 375; c.container.clientHeight = 812; c.resize(); sameOffset()
+  c.advanceNpcFocus(420); sameOffset()
+  c.resize(); sameOffset()
+  c.clearSelection({ restoreView: true }); sameOffset()
+  c.advanceNpcViewReturn(500); c.advanceNpcViewReturn(710); sameOffset()
+  c.container.clientWidth = 1200; c.container.clientHeight = 800; c.resize(); sameOffset()
+  c.advanceNpcViewReturn(920); sameOffset(); sameView(view(c), f.canonical)
+  c.controls.update(); sameOffset()
+})
+
+test('dismissal preserves the direction at dismissal, not an earlier focus direction', () => {
+  const f = runtimeFixture(); f.focus()
+  const c = f.c, offset = new THREE.Vector3().setFromSphericalCoords(c.camera.position.distanceTo(c.controls.target), Math.PI / 3, .83)
+  c.camera.position.copy(c.controls.target).add(offset); c.camera.lookAt(c.controls.target); c.camera.updateMatrixWorld(true)
+  c.clearSelection({ restoreView: true })
+  for (const now of [0, 210, 420]) {
+    c.advanceNpcViewReturn(now)
+    c.camera.position.clone().sub(c.controls.target).toArray().forEach((n, i) => close(n, offset.getComponent(i)))
+  }
+  c.controls.target.toArray().forEach((n, i) => close(n, f.canonical.target[i])); close(c.camera.zoom, 1.55)
+})
+
+test('clearing pending OrbitControls damping retains the exact current pose and consumes residual rotation', () => {
+  const f = runtimeFixture(), { camera, controls } = f.c
+  controls._sphericalDelta.theta = .4
+  controls._panOffset.set(1, 2, 3)
+  const before = view(f.c)
+  clearNpcCameraDamping(camera, controls)
+  sameView(view(f.c), before)
+  controls.update(); sameView(view(f.c), before)
+})
+
+test('adaptive gold contour is thin on mobile and DPR/downsampling correct without breakpoint jumps', () => {
+  const material = new THREE.MeshBasicMaterial(), outline = installNpcOutline(material)
+  const shader = { uniforms: {}, fragmentShader: THREE.ShaderLib.basic.fragmentShader }; material.onBeforeCompile(shader)
+  for (const [width, height] of [[320, 700], [375, 812], [430, 932], [812, 375], [1280, 900]]) {
+    const css = npcOutlineCssWidth(height * .29, width, height)
+    assert.ok(css >= .6 && css <= 1.5)
+    if (Math.min(width, height) <= 430) assert.ok(css <= .9)
+    for (const ratio of [.5, 1, 1.25, 2, 3]) {
+      outline.setViewport(height * .29, width, height); outline.setPixelRatio(ratio)
+      close(shader.uniforms.npcOutlineWidth.value / ratio, css)
+    }
+    assert.ok(Math.abs(npcOutlineCssWidth(height * .29, width + 1, height + 1) - css) < .01)
+  }
+  close(npcOutlineCssWidth(300, 1440, 900), 1.5)
+  close(npcOutlineCssWidth(20, 1440, 900), .6)
+  material.dispose()
+})
+
 test('gold contour shader preserves original alpha/depth and samples only the current atlas frame', () => {
   const material = new THREE.MeshBasicMaterial({ alphaTest: .35, depthTest: true, depthWrite: true })
   const outline = installNpcOutline(material)
@@ -188,7 +257,7 @@ test('gold contour shader preserves original alpha/depth and samples only the cu
   assert.equal(shader.uniforms.npcOutlineSelected.value, 0)
   outline.setSelected(true); outline.setPixelRatio(1.25)
   outline.setFrame({ x: 12, y: 20, width: 24, height: 40, sheet: { width: 128, height: 256 } })
-  assert.equal(shader.uniforms.npcOutlineSelected.value, 1); assert.equal(shader.uniforms.npcOutlineWidth.value, 2.5)
+  assert.equal(shader.uniforms.npcOutlineSelected.value, 1); assert.equal(shader.uniforms.npcOutlineWidth.value, 1.875)
   assert.deepEqual(shader.uniforms.npcOutlineFrame.value.toArray(), [12 / 128, 1 - 60 / 256, 36 / 128, 1 - 20 / 256])
   assert.equal(shader.uniforms.npcOutlineColor.value.getHexString(), NPC_OUTLINE_COLOR.slice(1))
   assert.match(shader.fragmentShader, /lessThan\(uv, npcOutlineFrame.xy\)/)
@@ -235,7 +304,9 @@ test('controller outline tracks animated UVs, is instance-local, clears on rebin
     assert.deepEqual(f.shader.uniforms.npcOutlineFrame.value.toArray(), [0, 0, .5, 1])
     f.controller.tick(100, .1)
     assert.deepEqual(f.shader.uniforms.npcOutlineFrame.value.toArray(), [.5, 0, 1, 1])
-    assert.equal(f.shader.uniforms.npcOutlineWidth.value, 1.5)
+    const outlineStats = f.controller.getStats().residents[0].outline
+    close(f.shader.uniforms.npcOutlineWidth.value, outlineStats.cssWidth * .75)
+    assert.ok(outlineStats.cssWidth < 1)
     assert.equal(f.root.getObjectByName('Scene3D_NPCs').children.length, children)
     assert.equal(f.controller.setSelection('Z'), false); assert.equal(f.shader.uniforms.npcOutlineSelected.value, 0)
     f.controller.setSelection('A'); await f.controller.bind(null, null, f.snapshot)

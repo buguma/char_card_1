@@ -22,9 +22,9 @@ async function identity(root) {
   const files = ['index.html', 'module/scene3d-bridge.js', 'module/scene3d-host.css', 'module/game-helpers.js', 'module/game-styles-theme.css', 'module/game-styles.css', 'module/game-styles-beautify.css', 'module/game-styles-elegant.css', 'assets/sect3d/current.json', `assets/sect3d/${release.manifest}`, `assets/sect3d/${release.buildId}/${manifest.entry}`, ...manifest.css.map(f => `assets/sect3d/${release.buildId}/${f}`)];
   return Object.fromEntries(await Promise.all(files.map(async f => [f, await hashFile(path.join(root, f))])));
 }
-async function installObservation(page, buildId) {
+export async function installObservation(page, buildId) {
   await page.evaluate(async buildId => {
-    window.__npcFocusTrace = { pointers: [], calls: [], mutations: [], operations: [], focusTransitions: [], returnTransitions: [] };
+    window.__npcFocusTrace = { pointers: [], calls: [], mutations: [], operations: [], focusTransitions: [], returnTransitions: [], cameraTransitions: [] };
     const box = element => {
       if (!element) return null;
       const css = getComputedStyle(element);
@@ -32,9 +32,13 @@ async function installObservation(page, buildId) {
       return { className: element.className, display: css.display, visibility: css.visibility, opacity: css.opacity, pointerEvents: css.pointerEvents, position: css.position, borders:[css.borderTopWidth,css.borderRightWidth,css.borderBottomWidth,css.borderLeftWidth], background:css.backgroundImage, before:{content:pseudo.content,background:pseudo.backgroundImage,size:pseudo.backgroundSize,display:pseudo.display}, rect: rect.toJSON(), text: element.textContent, centerTarget: document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)?.outerHTML.slice(0,250) };
     };
     for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'click', 'wheel', 'keydown']) document.addEventListener(type, event => {
-      __npcFocusTrace.pointers.push({ type, trusted: event.isTrusted, pointerType: event.pointerType, x: event.clientX, y: event.clientY, target: event.target.tagName + '.' + event.target.className, key: event.key, deltaY: event.deltaY, at: performance.now() });
-      if(type==='pointerdown') { const d=GameSceneBridge.getDiagnostics().renderer; if(d.returningNpcView) __npcFocusTrace.returnTransitions.push({returning:d.returningNpcView,zoom:d.cameraView.zoom,outline:d.npc.outline.selectedNpcId}); }
-      if(type==='pointerup') requestAnimationFrame(()=>{const d=GameSceneBridge.getDiagnostics().renderer;__npcFocusTrace.focusTransitions.push({at:performance.now(),selectedNpcId:d.selectedNpcId,focusingNpc:d.focusingNpc,overlay:!!document.querySelector('.scene3d-npc-selection.show')});});
+      __npcFocusTrace.pointers.push({ type, trusted: event.isTrusted, pointerType: event.pointerType, x: event.clientX, y: event.clientY, target: event.target.tagName + '.' + event.target.className, key: event.key, deltaY: event.deltaY, at: performance.now(), cameraView:type==='pointerup'?GameSceneBridge.getDiagnostics().renderer?.cameraView:undefined });
+      if(type==='pointerdown') { const d=GameSceneBridge.getDiagnostics().renderer; if(d?.returningNpcView) __npcFocusTrace.returnTransitions.push({returning:d.returningNpcView,zoom:d.cameraView.zoom,outline:d.npc.outline.selectedNpcId}); }
+      if(type==='pointerup') requestAnimationFrame(function observeTransition(){
+        const d=GameSceneBridge.getDiagnostics().renderer; if(!d?.cameraView)return;
+        __npcFocusTrace.focusTransitions.push({at:performance.now(),selectedNpcId:d.selectedNpcId,focusingNpc:d.focusingNpc,overlay:!!document.querySelector('.scene3d-npc-selection.show')});
+        if(d.focusingNpc||d.returningNpcView){__npcFocusTrace.cameraTransitions.push({phase:d.focusingNpc?'focus':'return',offset:d.cameraView.offset,zoom:d.cameraView.zoom});requestAnimationFrame(observeTransition);}
+      });
     }, true);
     const original = document.querySelector('#npc-info-popup');
     new MutationObserver(() => __npcFocusTrace.mutations.push({ at: performance.now(), original: box(original), overlay: box(document.querySelector('.scene3d-npc-selection')) })).observe(document.querySelector('#main-viewport'), { attributes: true, childList: true, subtree: true });
@@ -90,7 +94,7 @@ async function installObservation(page, buildId) {
   }
   return cdp;
 }
-async function realNpcClick(page, id) {
+export async function realNpcClick(page, id) {
   await page.evaluate(() => __npcFocusLoadVisuals());
   const attempts = [];
   for (const [fx, fy] of [[.5,.5],[.5,.3],[.5,.7],[.3,.5],[.7,.5],[.3,.3],[.7,.3],[.3,.7],[.7,.7]]) {
@@ -119,7 +123,7 @@ function assertFraming(state, id, initialDirection) {
   const resident = state.residents.find(n => n.gameNpcId === id), a = resident.anchor, r = state.canvas.rect;
   assert.ok(Math.abs(a.height / r.height - .29) < .002, 'Focused card height is .29 of canvas CSS height');
   assert.ok(Math.abs(a.left+a.width/2-r.left-r.width/2) < 2 && Math.abs(a.top+a.height/2-r.top-r.height/2) < 2, 'Focused card stays at viewport center');
-  assert.ok(distance(direction(state.diagnostics.renderer.cameraView), initialDirection) < .002, 'Original room camera direction restored');
+  assert.ok(distance(direction(state.diagnostics.renderer.cameraView), initialDirection) < .002, 'Focus preserves the camera angle from before the click');
   assert.equal(state.diagnostics.renderer.selectedNpcId,id); assert.equal(state.diagnostics.renderer.focusingNpc,false);
   if(state.frame) assert.ok(Math.abs(state.frame.rect.left+state.frame.rect.width/2-a.left-a.width/2)<2 && Math.abs(state.frame.rect.top+state.frame.rect.height/2-a.top-a.height/2)<2,'Overlay ring follows current NPC anchor');
 }
@@ -133,7 +137,7 @@ async function assertClosed(page, initialCamera) {
   assert.equal(d.renderer.returningNpcView,false);
   assert.equal(d.renderer.npc.outline.selectedNpcId,null);
   if (initialCamera) {
-    assert.ok(distance(d.renderer.cameraView.position,initialCamera.position)<.001,'Dismissal restores canonical camera position');
+    assert.ok(distance(d.renderer.cameraView.position,initialCamera.position)<.001,'Dismissal pans to room target without changing the chosen view offset');
     assert.ok(distance(d.renderer.cameraView.target,initialCamera.target)<.001,'Dismissal restores canonical target');
     assert.ok(Math.abs(d.renderer.cameraView.zoom-initialCamera.zoom)<.0001,'Dismissal restores canonical zoom');
   }
@@ -191,7 +195,7 @@ async function verifyMainLabels(page,dir) {
 
 export async function npcFocusBrowser({ browser, server, directory, buildId, lanes = [
   { style: 0, width: 1280, height: 900, quality: 'balanced', widthVariant: true }, { style: 1, width: 1280, height: 900, quality: 'low' },
-  { style: 0, width: 390, height: 844, quality: 'low' }, { style: 1, width: 390, height: 844, quality: 'low' },
+  { style: 0, width: 390, height: 844, quality: 'balanced', dpr: 3 }, { style: 1, width: 390, height: 844, quality: 'low' },
 ], quality }) {
   assert.ok(directory && path.isAbsolute(directory), 'Provide an absolute evidence directory');
   const pointer = await json(path.join(server.root, 'assets/sect3d/current.json'));
@@ -201,7 +205,7 @@ export async function npcFocusBrowser({ browser, server, directory, buildId, lan
   for (const lane of lanes) {
     const laneQuality = quality || lane.quality || 'low';
     const label = `style${lane.style}-${lane.width}x${lane.height}-${laneQuality}`, channel = `npc-focus-${label}`, dir = path.join(directory, label);
-    const session = await newGameContext(browser, server, { payload: await json(path.join(workspace, 'tests/scene3d/fixtures/saves/library.json')), channel, style: lane.style, viewport: { width: lane.width, height: lane.height, deviceScaleFactor: 1 }, scene3dPreferences: { enabled: true, quality: laneQuality } });
+    const session = await newGameContext(browser, server, { payload: await json(path.join(workspace, 'tests/scene3d/fixtures/saves/library.json')), channel, style: lane.style, viewport: { width: lane.width, height: lane.height, deviceScaleFactor: lane.dpr || 1 }, scene3dPreferences: { enabled: true, quality: laneQuality } });
     const { page } = session; let cdp;
     try {
       await startGame(session, server);
@@ -217,6 +221,11 @@ export async function npcFocusBrowser({ browser, server, directory, buildId, lan
       assert.ok(distance(direction(dragged.diagnostics.renderer.cameraView), initialDirection) > .015, 'Real drag changes the initial camera azimuth');
       assert.equal(dragged.trace.calls.length, 0, 'Drag must not emit an NPC intent');
       const attempts = await realNpcClick(page,id); await artifact(dir,'click-attempts.json',attempts);
+      // Orbit damping may continue between a screenshot and the later native
+      // click. Compare with the actual pointerup pose, not that older screenshot.
+      const clickedView=await page.evaluate(()=>__npcFocusTrace.pointers.filter(p=>p.type==='pointerup'&&p.target==='CANVAS.scene3d-canvas'&&p.cameraView).at(-1).cameraView);
+      const focusDirection=direction(clickedView), offset=clickedView.offset;
+      const expectedReturn={...initial.diagnostics.renderer.cameraView,position:initial.diagnostics.renderer.cameraView.target.map((v,i)=>v+offset[i])};
       const opened = await sample('settled-menu'); await frames(page,1000); const settled = await sample('menu-plus-one-second');
       assert.ok(settled.overlay && settled.overlay.display !== 'none' && settled.overlay.visibility === 'visible' && Number(settled.overlay.opacity) > .95, 'Owned menu remains actually visible after native click and one second');
       assert.ok(!settled.original.className.split(/\s+/).includes('show'), 'Legacy popup remains closed');
@@ -229,7 +238,8 @@ export async function npcFocusBrowser({ browser, server, directory, buildId, lan
         assert.ok(button.rect.width > 0 && button.rect.height > 0 && button.visibility === 'visible' && button.display !== 'none' && button.pointerEvents !== 'none', `Action is visibly laid out and pointer-enabled: ${button.text}`);
         assert.ok(button.centerTarget?.includes('npc-selection-option'), `Action center is not clipped or covered: ${button.text}`);
       }
-      assertFraming(settled,id,initialDirection);
+      assertFraming(settled,id,focusDirection);
+      for(const frame of settled.trace.cameraTransitions) assert.ok(distance(frame.offset,offset)<.001,'No rotation or dolly during any observed focus frame');
       assert.equal(settled.diagnostics.renderer.npc.outline.selectedNpcId,id);
       assert.equal(settled.diagnostics.renderer.npc.outline.mode,'alpha-contour');
       await artifact(dir,'description.json',await assertDescription(page));
@@ -244,23 +254,26 @@ export async function npcFocusBrowser({ browser, server, directory, buildId, lan
       assert.ok(visibleAlphaFraction >= .25 && visibleAlphaFraction <= 1/3, `Actual alpha silhouette height must occupy 1/4–1/3: ${visibleAlphaFraction}`);
       assert.ok(Math.abs(a.left+a.width/2-(canvas.left+canvas.width/2)) <= 2, 'Focused card is horizontally centered');
       assert.ok(Math.abs(a.top+a.height/2-(canvas.top+canvas.height/2)) <= 2, 'Focused card is vertically centered');
-      assert.ok(distance(direction(settled.diagnostics.renderer.cameraView),initialDirection)<.002, 'Focus restores original room camera direction after drag');
+      assert.ok(distance(direction(settled.diagnostics.renderer.cameraView),focusDirection)<.002, 'Focus keeps the player-chosen angle after drag');
+      assert.ok(resident.outline.cssWidth>=.6&&resident.outline.cssWidth<=1.5);
+      if(lane.width<=430) assert.ok(resident.outline.cssWidth<.9,'Small-screen contour must stay below one CSS pixel');
+      assert.ok(Math.abs(resident.outline.bufferWidth-resident.outline.cssWidth*resident.outline.pixelRatio)<.0001,'Outline scales correctly with physical pixel ratio');
       assert.ok(settled.trace.pointers.filter(e=>e.type==='pointerdown'||e.type==='pointerup').every(e=>e.trusted));
       assert.equal(settled.trace.calls.at(-1).event.type,'npcIntent');
-      const resizedViewport={width:lane.width>600?1060:430,height:lane.height>850?780:920,deviceScaleFactor:1};
-      await page.setViewport(resizedViewport); await frames(page,650); const resized=await sample('resized-menu'); assertFraming(resized,id,initialDirection);
-      await page.setViewport({width:lane.width,height:lane.height,deviceScaleFactor:1}); await frames(page,650); assertFraming(await sample('restored-size-menu'),id,initialDirection);
+      const resizedViewport={width:lane.width>600?1060:430,height:lane.height>850?780:920,deviceScaleFactor:lane.dpr||1};
+      await page.setViewport(resizedViewport); await frames(page,650); const resized=await sample('resized-menu'); assertFraming(resized,id,focusDirection);
+      await page.setViewport({width:lane.width,height:lane.height,deviceScaleFactor:lane.dpr||1}); await frames(page,650); assertFraming(await sample('restored-size-menu'),id,focusDirection);
       if (lane.widthVariant) {
         const prose=await page.evaluate(()=>Object.entries(npcs).map(([id,n])=>({id,text:n.description}))), matrix=[];
         for (const width of [953,729,390]) {
-          await page.setViewport({width,height:900,deviceScaleFactor:1}); await frames(page,100);
+          await page.setViewport({width,height:900,deviceScaleFactor:lane.dpr||1}); await frames(page,100);
           for (const entry of prose) {
             await page.evaluate(text=>{document.querySelector('.scene3d-npc-selection .npc-selection-desc').textContent=text; dispatchEvent(new Event('resize'));},entry.text);
             await frames(page,30); matrix.push({width,id:entry.id,...await assertDescription(page)});
           }
         }
         await artifact(dir,'description-all-npcs-width-matrix.json',matrix);
-        await page.setViewport({width:lane.width,height:lane.height,deviceScaleFactor:1});
+        await page.setViewport({width:lane.width,height:lane.height,deviceScaleFactor:lane.dpr||1});
         await page.evaluate(id=>{document.querySelector('.scene3d-npc-selection .npc-selection-desc').textContent=npcs[id].description; dispatchEvent(new Event('resize'));},id); await frames(page,150);
       }
       await emptyClick(page);
@@ -270,8 +283,9 @@ export async function npcFocusBrowser({ browser, server, directory, buildId, lan
       assert.equal(returning?.returning,true,'Dismissal arms an animation rather than jumping');
       assert.equal(returning.outline,null,'Gold contour clears immediately');
       assert.ok(Math.abs(returning.zoom-settled.diagnostics.renderer.cameraView.zoom)<.001,'Camera starts return at the focused zoom without a jump');
-      await assertClosed(page,initial.diagnostics.renderer.cameraView); await sample('empty-click-closed');
-      await realNpcClick(page,id); await page.keyboard.press('Escape'); await assertClosed(page,initial.diagnostics.renderer.cameraView); await sample('escape-closed');
+      await assertClosed(page,expectedReturn); const closed=await sample('empty-click-closed');
+      for(const frame of closed.trace.cameraTransitions) assert.ok(distance(frame.offset,offset)<.001,'No rotation or dolly during any observed focus/return frame');
+      await realNpcClick(page,id); await page.keyboard.press('Escape'); await assertClosed(page,expectedReturn); await sample('escape-closed');
       await realNpcClick(page,id);
       const labels = await page.$$eval(`${overlay} .npc-selection-option`, ns=>ns.map(n=>({text:n.textContent,disabled:n.disabled})));
       assert.equal(labels.length,3);

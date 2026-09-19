@@ -71,6 +71,7 @@ test('framing reaches exact screen height across zoom, character heights, azimut
 test('resize refits from fresh projection rather than compounding the previous zoom', () => {
   const f = fixture({ zoom: 3.7, height: 1.49, azimuth: 2.13 })
   assert.equal(frameNpcCamera(f.camera, f.controls, f.geometry()), true)
+  const direction = f.camera.position.clone().sub(f.controls.target)
   for (const [width, height, span] of [[1920, 1080, 35], [360, 800, 100], [800, 360, 25], [640, 480, 48]]) {
     f.camera.left = -span * width / height / 2; f.camera.right = -f.camera.left
     f.camera.top = span / 2; f.camera.bottom = -span / 2
@@ -78,6 +79,7 @@ test('resize refits from fresh projection rather than compounding the previous z
     assert.equal(frameNpcCamera(f.camera, f.controls, f.geometry()), true)
     assertFramed(f, .29)
     close(f.geometry().projectedHeight * height, .29 * height, 'resized CSS pixel height')
+    vectorClose(f.camera.position.clone().sub(f.controls.target), direction, 'resized direction and distance')
   }
 })
 

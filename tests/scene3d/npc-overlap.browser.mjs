@@ -3,7 +3,7 @@ import path from 'node:path';
 import { readFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { deflateSync, inflateSync } from 'node:zlib';
-import { artifact, json, launchBrowser, sha256, workspace } from '../../scene3d/scripts/test-support.mjs';
+import { artifact, launchBrowser, sha256, workspace } from '../../scene3d/scripts/test-support.mjs';
 import { startTestServer } from '../../scene3d/scripts/test-server.mjs';
 
 /**
@@ -78,14 +78,18 @@ function floorGlb() {
 }
 const frames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
-export async function npcOverlap({ browser, server, directory, buildId = 'integration-005' }) {
+export async function npcOverlap({ browser, server, directory, buildId }) {
   assert.ok(browser && server?.origin && directory, 'browser, test server and diagnostic directory required');
   directory = path.resolve(directory);
   const relative = path.relative(path.join(workspace, '.scene3d-work'), directory);
   assert.ok(relative && !relative.startsWith('..') && !path.isAbsolute(relative), 'Evidence must be in an independent .scene3d-work subdirectory');
   await mkdir(directory, { recursive: true });
   const pointerPath = path.join(server.root, 'assets/sect3d/current.json'), pointerBefore = await readFile(pointerPath);
-  assert.equal(JSON.parse(pointerBefore).buildId, buildId);
+  const release = JSON.parse(pointerBefore);
+  assert.equal(release.schemaVersion, 1, 'Unsupported current pointer schema');
+  assert.ok(typeof release.buildId === 'string' && release.buildId.length > 0, 'Current build ID required');
+  if (buildId !== undefined) assert.equal(release.buildId, buildId, 'Expected build must match current pointer');
+  buildId = release.buildId; // Reference only: this branch executes source plus controlled fixtures, not this release.
   const context = await browser.createBrowserContext(), page = await context.newPage();
   const network = [], pageerrors = [], violations = [], consoleErrors = [], evidence = [], sourceHashes = {};
   const pngs = { A: portrait('A'), D: portrait('D') }, glb = floorGlb();
@@ -240,7 +244,7 @@ export async function npcOverlap({ browser, server, directory, buildId = 'integr
     assert.ok(network.filter(n => n.event === 'response').every(n => n.status === 200)); assert.equal(network.filter(n => n.event === 'failed').length, 0);
     for (const suffix of ['runtime.js', 'npcs.js', 'library_interior.glb', '/A.png', '/D.png']) assert.ok(network.some(n => n.event === 'response' && n.url.endsWith(suffix) && n.status === 200), `HTTP200 ${suffix}`);
     result = { status: 'PASS', contract: NPC_OVERLAP_CONTRACT, buildIdReference: buildId, sourceHashes, fixtureHashes: { floor: sha256(glb), A: sha256(pngs.A), D: sha256(pngs.D) }, cases: evidence, solidRemovalControl: restored, cleanup, pageerrors, violations,
-      scope: 'Unmodified source runtime and createNpcController, real Three/WebGL/GLTFLoader/PNG decode; controlled legal floor + PNG + camera projection, fixed valid snapshot. Not integration-005 bundled full game menu/battle, not physical Android. Existing 37jfr9 asset and current pointer are untouched.' };
+      scope: 'Unmodified source runtime and createNpcController, real Three/WebGL/GLTFLoader/PNG decode; controlled legal floor + PNG + camera projection, fixed valid snapshot. Not bundled full game menu/battle integration, not physical Android. Existing 37jfr9 asset and current pointer are untouched.' };
   } catch (error) { failure = error; await artifact(directory, 'failure.json', { message: error.message, stack: error.stack, evidence, pageerrors, violations, consoleErrors }); try { await page.screenshot({ path: path.join(directory, 'failure.png') }); } catch {} }
   finally {
     try { if (!page.isClosed()) await page.evaluate(async () => { if (window.__overlap) await window.__overlap.view.destroy(); }); } catch {}

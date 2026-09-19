@@ -6,6 +6,7 @@ import { mkdir } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { artifact, assertSessionSafe, fixturesRoot, hashFile, json, launchBrowser, newGameContext, saveSessionEvidence, startGame, workspace } from '../../scene3d/scripts/test-support.mjs';
 import { startTestServer } from '../../scene3d/scripts/test-server.mjs';
+import { safeRelative, verifyRelease } from '../../scene3d/scripts/artifact-utils.mjs';
 import { INTERIOR_SCENES } from '../../scene3d/src/interior-scenes.js';
 
 const frames = (page, count = 24) => page.evaluate(count => new Promise(resolve => {
@@ -43,17 +44,24 @@ function movement(before, after) {
     return label.visible && next?.visible ? [{ id: label.id, pixels: Math.hypot(next.anchor.left - label.anchor.left, next.anchor.top - label.anchor.top) }] : [];
   });
 }
-async function sourceIdentity(release) {
-  const manifest = await json(path.join(workspace, 'assets/sect3d', release.manifest));
+async function sourceIdentity(root, release, manifest) {
   const files = ['module/scene3d-bridge.js', 'module/scene3d-host.css', 'assets/sect3d/current.json', `assets/sect3d/${release.manifest}`,
     `assets/sect3d/${release.buildId}/${manifest.entry}`, ...manifest.css.map(name => `assets/sect3d/${release.buildId}/${name}`)];
-  return Object.fromEntries(await Promise.all(files.map(async file => [file, await hashFile(path.join(workspace, file))])));
+  return Object.fromEntries(await Promise.all(files.map(async file => [file, await hashFile(path.join(root, file))])));
 }
 
-export async function verifyLocationLabels({ browser, server, directory, buildId = 'integration-014' }) {
-  const release = await json(path.join(workspace, 'assets/sect3d/current.json'));
-  assert.equal(release.buildId, buildId, 'Test must exercise the final current pointer');
-  const beforeSource = await sourceIdentity(release), results = [];
+export async function verifyLocationLabels({ browser, server, directory, buildId, gameRoot }) {
+  const root = gameRoot || server.root || workspace;
+  const release = await json(path.join(root, 'assets/sect3d/current.json'));
+  assert.equal(release.schemaVersion, 1, 'Unsupported current pointer schema');
+  safeRelative(release.buildId); assert.ok(!release.buildId.includes('/'), 'Invalid current build ID');
+  assert.deepEqual(release.bridgeProtocol, { min: 1, max: 1 }, 'Unsupported current bridge protocol');
+  assert.equal(release.manifest, `${release.buildId}/manifest.json`, 'Current manifest must belong to selected build');
+  assert.match(release.manifestSha256, /^[a-f0-9]{64}$/, 'Current manifest hash required');
+  if (buildId !== undefined) assert.equal(release.buildId, buildId, 'Expected build must match current pointer');
+  buildId = release.buildId;
+  const { manifest } = await verifyRelease(path.join(root, 'assets/sect3d', buildId), buildId, release.manifestSha256);
+  const beforeSource = await sourceIdentity(root, release, manifest), results = [];
   await artifact(directory, 'source-before.json', beforeSource);
   for (const lane of [
     { name: 'desktop-1280x900-ui0', style: 0, viewport: { width: 1280, height: 900, deviceScaleFactor: 1 } },
@@ -141,7 +149,7 @@ export async function verifyLocationLabels({ browser, server, directory, buildId
     results.push({ ...lane, checks, failures: checks.filter(c => c.status === 'FAIL'), initialHidden: evidence.initial?.labels.filter(l => !l.visible).map(l => l.id), initialClipped: evidence.initial?.labels.filter(l => l.clipped).map(l => l.id) });
     console.log(JSON.stringify({ lane: lane.name, checks: checks.length, failures: results.at(-1).failures }));
   }
-  const afterSource = await sourceIdentity(release);
+  const afterSource = await sourceIdentity(root, release, manifest);
   await artifact(directory, 'source-after.json', afterSource);
   const sourceStable = JSON.stringify(beforeSource) === JSON.stringify(afterSource);
   const summary = { release, sourceStable, results, scope: 'Synthetic map.json host saves; real current published assets; isolated Chromium contexts; desktop and mobile-size mouse/wheel input, not physical touch hardware. No NPC action/focus tests.' };
@@ -151,7 +159,7 @@ export async function verifyLocationLabels({ browser, server, directory, buildId
 }
 
 async function main() {
-  const directory = process.argv[2], buildId = process.argv[3] || 'integration-014';
+  const directory = process.argv[2], buildId = process.argv[3];
   assert.ok(directory && path.isAbsolute(directory), 'Provide a new absolute evidence directory');
   await mkdir(directory, { recursive: false });
   const server = await startTestServer({ gameRoot: workspace }); let browser;

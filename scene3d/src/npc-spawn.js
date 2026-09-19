@@ -75,14 +75,62 @@ export function cardsOverlap(a, pa, b, pb, camera) {
     Math.min(va.y + sa.screenHeight, vb.y + sb.screenHeight) > Math.max(va.y, vb.y) - .15
 }
 
+// Dense rosters use a fixed pool of real floor samples and allocation-free
+// projected tests. Sweep packing avoids repeatedly stranding the last resident
+// in a random pocket. The legacy <=3 stream below remains byte-for-byte intact.
+function placeDenseNpcs(sampler, npcs, camera, random, attempts, trials) {
+  const candidates = Array.from({ length: trials }, () => {
+    const point = sampler.sample(random), view = point.clone().applyMatrix4(camera.matrixWorldInverse)
+    return { point, x: view.x, y: view.y }
+  })
+  const sizes = npcs.map(npc => cardSize(npc, camera))
+  const order = npcs.map((_, i) => i).sort((a, b) => sizes[b].width * sizes[b].screenHeight - sizes[a].width * sizes[a].screenHeight || a - b)
+  const sweeps = Array.from({ length: attempts }, (_, i) => {
+    const slope = attempts > 1 ? (i / (attempts - 1) - .5) * 2 : 0
+    return candidates.slice().sort((a, b) => (a.y + slope * a.x) - (b.y + slope * b.x))
+  })
+  function pack(scale) {
+    for (const sweep of sweeps) {
+      const placed = []
+      for (const i of order) {
+        const size = sizes[i]
+        const candidate = sweep.find(point => placed.every(other => {
+          const peer = sizes[other.i], separation = Math.max(1.8, (size.width + peer.width) / 2 + .6) * scale
+          if (Math.hypot(point.point.x - other.point.point.x, point.point.z - other.point.point.z) < separation) return false
+          return Math.abs(point.x - other.point.x) >= (size.width + peer.width) * scale / 2 + .15 ||
+            Math.min(point.y + size.screenHeight * scale, other.point.y + peer.screenHeight * scale) <= Math.max(point.y, other.point.y) - .15
+        }))
+        if (!candidate) break
+        placed.push({ i, point: candidate })
+      }
+      if (placed.length === npcs.length) return placed.sort((a, b) => a.i - b.i).map(({ i, point }) => ({ npc: npcs[i], point: point.point, scale }))
+    }
+    return null
+  }
+  const full = pack(1)
+  if (full) return full
+  // Only dense rosters that failed at authored size may shrink uniformly.
+  // Search the largest feasible scale to 1/1024 precision; do not impose a
+  // room-specific minimum scale, relax silhouette gaps, or invent floor area.
+  // Every trial reuses the same authored sample pool and bounded sweep budget.
+  let low = 0, high = 1, best = null
+  for (let step = 0; step < 10; step++) {
+    const scale = (low + high) / 2, result = pack(scale)
+    if (result) { low = scale; best = result } else high = scale
+  }
+  if (best) return best
+  throw new Error('NPC_FLOOR_CROWDED')
+}
+
 export function placeNpcs(floor, npcs, camera, random, { attempts = 40, trials = 600 } = {}) {
   if (typeof random !== 'function') throw new TypeError('NPC placement requires an explicit private random source')
-  if (!Array.isArray(npcs) || npcs.length > 3) throw new TypeError('NPC placement only accepts the host selected subset (at most three)')
+  if (!Array.isArray(npcs) || npcs.length > 15) throw new TypeError('NPC placement only accepts the host roster (at most fifteen)')
   if (!npcs.length) return []
   attempts = Math.max(1, Math.min(40, Math.floor(attempts) || 1))
   trials = Math.max(1, Math.min(600, Math.floor(trials) || 1))
   const sampler = createFloorSampler(floor)
   camera.updateMatrixWorld(true)
+  if (npcs.length > 3) return placeDenseNpcs(sampler, npcs, camera, random, attempts, trials)
   for (let attempt = 0; attempt < attempts; attempt++) {
     const placed = []
     for (let i = 0; i < npcs.length; i++) {

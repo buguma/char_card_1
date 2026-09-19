@@ -213,7 +213,7 @@ async function capture(ctx, page, name) {
   await artifact(ctx.directory, `${name}.json`, { state, diagnostics, screenshotSha256: sha256(bytes) });
   return { state, diagnostics, screenshotSha256: sha256(bytes) };
 }
-async function importPayload(ctx, page, name, payload, { expectRosterRejection = false } = {}) {
+async function importPayload(ctx, page, name, payload) {
   const filename = await artifact(ctx.directory, `${name}-fixture.json`, payload);
   await importJsonFile(page, filename);
   // Shared chooser helper closes importSave's toggled history menu. Conditional
@@ -221,8 +221,7 @@ async function importPayload(ctx, page, name, payload, { expectRosterRejection =
   if (await page.$('#history-dropdown.show')) await stableClick(await page.$('.dropdown-toggle[onclick*="history-dropdown"]'));
   await page.waitForFunction(() => !document.querySelector('.dropdown-menu.show'));
   const state=await readState(page),diagnostics=await diag(page);
-  if(expectRosterRejection) await page.waitForFunction(()=>GameSceneBridge.getDiagnostics().snapshot?.rosterError && GameSceneBridge.getDiagnostics().readyScene===null);
-  else if(diagnostics.preferences.enabled && state.GameMode===0 && state.inputEnable!==0) await waitReady(page,state.userLocation);
+  if(diagnostics.preferences.enabled && state.GameMode===0 && state.inputEnable!==0) await waitReady(page,state.userLocation);
   return readState(page);
 }
 async function advanceBusinessClock(page) {
@@ -488,23 +487,31 @@ export async function refreshRules(ctx) {
       const invalid = await payloadFor(conflict === 'hidden' ? ['A'] : []);
       if (conflict === 'hidden') invalid.gameData.npcVisibility.A = false;
       else invalid.gameData.npcLocations.Z = 'cangjingge';
-      await importPayload(ctx, session.page, `p3t03-${conflict}-resident`, invalid, { expectRosterRejection: true });
-      await session.page.waitForFunction(() => window.GameSceneBridge.getDiagnostics().snapshot?.rosterError);
+      await importPayload(ctx, session.page, `p3t03-${conflict}-resident`, invalid);
+      await waitReady(session.page, 'cangjingge');
       const state = await readState(session.page);
       if (conflict === 'hidden') { assert.equal(state.currentNpcLocations.A, 'cangjingge'); assert.equal(state.npcVisibility.A, false); }
-      else assert.equal(state.currentNpcLocations.Z, 'cangjingge', 'Adapter may reject but must not silently repair the unknown business identity');
-      assert.equal((await diag(session.page)).readyScene, null); await assertPaused(session.page); await capture(ctx, session.page, `p3t03-invalid-${conflict}`);
+      else assert.equal(state.currentNpcLocations.Z, 'cangjingge', 'Adapter must not silently repair the unknown business identity');
+      const filtered=await diag(session.page);
+      assert.equal(filtered.readyScene, 'library'); assert.equal(filtered.snapshot.rosterError, false);
+      assert.deepEqual(filtered.snapshot.residents, []); assert.deepEqual(filtered.snapshot.renderedNpcs, []);
+      assert.equal(filtered.renderer.npc.cards, 0);
+      await capture(ctx, session.page, `p3t03-filtered-${conflict}`);
     }
   });
-  return { refreshesPerLane: 5, fullStateAndRngDiff: 0, hiddenResidentRejectedWithoutRepair: true };
+  return { refreshesPerLane: 5, fullStateAndRngDiff: 0, hiddenResidentExcludedWithoutBusinessMutation: true };
 }
 
 export async function crowdingAndFailure(ctx) {
   const release = await releaseIdentity(ctx); const coverage = [];
   for (const count of [0, 1, 2, 3, 4, 15]) await withGame(ctx, `p3t04-count${count}`, { payload: await payloadFor(IDS.slice(0, count)) }, async session => {
     const d = await waitReady(session.page, 'cangjingge');
-    assert.equal(d.snapshot.residents.length, count); assert.equal(d.snapshot.renderedNpcs.length, Math.min(3, count));
-    assert.deepEqual(d.snapshot.renderedNpcs.map(n => n.gameNpcId), (await readState(session.page)).visibleNpcIds);
+    assert.equal(d.snapshot.residents.length, count); assert.equal(d.snapshot.renderedNpcs.length, count);
+    assert.deepEqual(d.snapshot.renderedNpcs.map(n => n.gameNpcId).sort(), IDS.slice(0,count).sort());
+    const original2d=(await readState(session.page)).visibleNpcIds;
+    assert.equal(original2d.length, Math.min(3,count), 'Original 2D portrait cap remains unchanged');
+    assert.ok(original2d.every(id=>d.snapshot.renderedNpcs.some(n=>n.gameNpcId===id)));
+    assert.equal(d.renderer.npc.cards,count); assert.deepEqual(d.renderer.npc.fallbacks,[]);
     const before = await readState(session.page), layout = d.renderer.npc.residents.map(({ gameNpcId, foot }) => ({ gameNpcId, foot })), loads = d.renderer.npc.loads;
     for (let i = 0; i < 4; i++) { await session.page.evaluate(() => GameSceneBridge.notify('test-same-state', true)); await quietFrames(session.page); }
     const after = await diag(session.page); assert.equal(after.renderer.npc.loads, loads); assert.deepEqual(after.renderer.npc.residents.map(({ gameNpcId, foot }) => ({ gameNpcId, foot })), layout); assert.deepEqual(await readState(session.page), before);
