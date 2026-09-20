@@ -7,7 +7,7 @@ set "ENTRY=start-screen-noST.html"
 
 echo.
 echo  ==========================================================
-echo   瀚海归义录 - 本地启动
+echo   瀚海归义录 - 本地启动（已禁用缓存）
 echo  ==========================================================
 echo.
 echo   游戏地址: http://127.0.0.1:%PORT%/%ENTRY%
@@ -19,13 +19,13 @@ start "" /min powershell -NoProfile -Command "Start-Sleep -Seconds 2; Start-Proc
 
 where python >nul 2>nul
 if not errorlevel 1 (
-    python -m http.server %PORT% --bind 127.0.0.1
+    python serve.py %PORT%
     goto :done
 )
 
 where py >nul 2>nul
 if not errorlevel 1 (
-    py -3 -m http.server %PORT% --bind 127.0.0.1
+    py -3 serve.py %PORT%
     goto :done
 )
 

@@ -81,8 +81,10 @@
     <link rel="stylesheet" href="module/game-styles.css">
     <link rel="stylesheet" href="module/game-styles-theme.css" id="theme-css">
     <!-- UI美化层：图标/装饰/动效（纯表现层，按 body.ui-style-* 自动适配两套主题） -->
-    <link rel="stylesheet" href="module/game-styles-beautify.css" id="beautify-css">
+    <link rel="stylesheet" href="module/game-styles-beautify.css?v=ui-click-title-2" id="beautify-css">
     <link rel="stylesheet" href="module/scene3d-host.css">
+    <!-- 布局迭代层：视窗右下角控制面板、文本区输入栏、横屏（左右分栏）布局 -->
+    <link rel="stylesheet" href="module/game-styles-layout.css">
     <!-- 字体文件较大且 file:// 协议下会被浏览器 CORS 拦截，故仅在线/WebView 环境加载（双击打开时回退本地楷体） -->
     <script>
         if (location.protocol !== 'file:') {
@@ -483,72 +485,75 @@
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-              
-        <!-- 底部面板：中间控制按钮 + 自由行动输入（合并一圈外框，古风下统一米黄底枯笔框） -->
-        <div class="bottom-panel">
-        <div class="control-buttons">
-            <!-- 属性查看下拉菜单 -->
-            <div class="dropdown-wrapper">
-                <button class="control-btn dropdown-toggle be-seal be-seal-attr" onclick="toggleDropdown('attribute-dropdown')">
-                    属性查看 ▲
-                </button>
-                <div id="attribute-dropdown" class="dropdown-menu">
-                    <button class="dropdown-item" onclick="showPlayerStats()">角色属性</button>
-                    <button class="dropdown-item" onclick="showRelationships()">人际关系</button>
-                    <button class="dropdown-item" onclick="showInventory()">查看背包</button>
-                    <button class="dropdown-item" onclick="showEquipment()">查看装备</button>
-                    <button id="show-skill-equipment-btn" class="dropdown-item" onclick="showSkillEquipment()">查看技能</button>
-                    <!-- <button class="dropdown-item" onclick="showCheatMode()">金手指</button> -->
-                </div>
-            </div>
-            
-            <!-- 系统设置下拉菜单 -->
-            <div class="dropdown-wrapper">
-                <button class="control-btn dropdown-toggle be-seal be-seal-system" onclick="toggleDropdown('system-dropdown')">
-                    系统设置 ▲
-                </button>
-                <div id="system-dropdown" class="dropdown-menu">
-                    <button class="dropdown-item" onclick="showGameSettings()">游戏设置</button>
-                    <button class="dropdown-item" onclick="showConfigModal()">⚙AI配置</button>
-                    <button class="dropdown-item" onclick="showCheatMode()">金手指</button>
-                    <button class="dropdown-item" onclick="openPlayGuide()">玩法说明</button>
-                </div>
-            </div>
-            
-            <!-- 新增：历史信息下拉菜单 -->
-            <div class="dropdown-wrapper">
-                <button class="control-btn dropdown-toggle be-seal be-seal-history" onclick="toggleDropdown('history-dropdown')">
-                    历史管理 ▲
-                </button>
-                <div id="history-dropdown" class="dropdown-menu">
-                    <!-- <button class="dropdown-item" id="toggle-compress-summary-btn" onclick="toggleCompressSummary()">强力总结(关)</button> -->
-                    <!-- <button class="dropdown-item" onclick="saveGame()">存档</button> -->
-                    <!-- <button class="dropdown-item" onclick="loadGame()">读档</button> -->
-                    <button class="dropdown-item" onclick="showLoadModal()">存档管理</button>
-                    <!-- <button class="dropdown-item" onclick="showLastUserInput()">上轮输入</button> -->
-                    <button class="dropdown-item" onclick="showHistorySummary()">历史记录</button>
-                    <button class="dropdown-item" onclick="showPipelineLog()">日志查看</button>
-                    <button class="dropdown-item" id="btn-return-menu" onclick="returnToStartScreen()" style="display:none">初始界面</button>                   
-                </div>
-            </div>
-            
-            <button class="control-btn be-seal be-seal-skip" id="skip-week-btn" onclick="skipWeek()">跳过这一周</button>
-            <button class="control-btn be-seal be-seal-return" id="slg-return-btn" onclick="returnFromSLG()" style="display: none;">返回天山派</button>
-        </div>
 
-        <!-- 自由行动输入框 -->
-        <div class="free-action-container">
-            <textarea
-                class="free-action-input"
-                id="free-action-input"
-                placeholder="输入自由行动内容"
-                rows="1"
-            ></textarea>
-            <button class="free-action-send-btn" id="regenerate-btn" onclick="handleRegenerate()">重生成</button>
-            <button class="free-action-send-btn" id="free-action-send-btn" onclick="sendFreeAction()">发送</button>
-        </div>
+                <!-- ===== 视窗 HUD：右下角齿轮 + 向左展开的四枚控制按钮 =====
+                     位置参照 3D 场景「镜头归位」按钮（scene3d/src/scene3d.css 的 .scene3d-reset）；
+                     层级 950：高于 SLG 图层(10)/NPC选框(50)/流式遮罩(900)，低于各类弹窗(2000+)，
+                     故 GameMode=1 时不会被 CG 图遮住；战斗/炼丹/21点/种植弹窗打开时由 CSS 隐藏。 -->
+                <div class="viewport-dock-layer" id="viewport-dock-layer">
+                    <div class="viewport-dock" id="viewport-dock">
+                        <div id="viewport-dock-menu">
+                            <!-- 属性查看下拉菜单 -->
+                            <div class="dropdown-wrapper">
+                                <button class="control-btn dropdown-toggle be-seal be-seal-attr" onclick="toggleDropdown('attribute-dropdown')">
+                                    属性查看 ▲
+                                </button>
+                                <div id="attribute-dropdown" class="dropdown-menu">
+                                    <button class="dropdown-item" onclick="showPlayerStats()">角色属性</button>
+                                    <button class="dropdown-item" onclick="showRelationships()">人际关系</button>
+                                    <button class="dropdown-item" onclick="showInventory()">查看背包</button>
+                                    <button class="dropdown-item" onclick="showEquipment()">查看装备</button>
+                                    <button id="show-skill-equipment-btn" class="dropdown-item" onclick="showSkillEquipment()">查看技能</button>
+                                    <!-- <button class="dropdown-item" onclick="showCheatMode()">金手指</button> -->
+                                </div>
+                            </div>
+
+                            <!-- 系统设置下拉菜单 -->
+                            <div class="dropdown-wrapper">
+                                <button class="control-btn dropdown-toggle be-seal be-seal-system" onclick="toggleDropdown('system-dropdown')">
+                                    系统设置 ▲
+                                </button>
+                                <div id="system-dropdown" class="dropdown-menu">
+                                    <button class="dropdown-item" onclick="showGameSettings()">游戏设置</button>
+                                    <button class="dropdown-item" onclick="showConfigModal()">⚙AI配置</button>
+                                    <button class="dropdown-item" onclick="showCheatMode()">金手指</button>
+                                    <button class="dropdown-item" onclick="openPlayGuide()">玩法说明</button>
+                                </div>
+                            </div>
+
+                            <!-- 历史信息下拉菜单 -->
+                            <div class="dropdown-wrapper">
+                                <button class="control-btn dropdown-toggle be-seal be-seal-history" onclick="toggleDropdown('history-dropdown')">
+                                    历史管理 ▲
+                                </button>
+                                <div id="history-dropdown" class="dropdown-menu">
+                                    <!-- <button class="dropdown-item" id="toggle-compress-summary-btn" onclick="toggleCompressSummary()">强力总结(关)</button> -->
+                                    <!-- <button class="dropdown-item" onclick="saveGame()">存档</button> -->
+                                    <!-- <button class="dropdown-item" onclick="loadGame()">读档</button> -->
+                                    <button class="dropdown-item" onclick="showLoadModal()">存档管理</button>
+                                    <!-- <button class="dropdown-item" onclick="showLastUserInput()">上轮输入</button> -->
+                                    <button class="dropdown-item" onclick="showHistorySummary()">历史记录</button>
+                                    <button class="dropdown-item" onclick="showPipelineLog()">日志查看</button>
+                                    <button class="dropdown-item" id="btn-return-menu" onclick="returnToStartScreen()" style="display:none">初始界面</button>
+                                </div>
+                            </div>
+
+                            <div class="dock-btn-wrap" id="skip-week-wrap">
+                                <button class="control-btn be-seal be-seal-skip" id="skip-week-btn" onclick="skipWeek()">跳过这一周</button>
+                            </div>
+                            <div class="dock-btn-wrap" id="slg-return-wrap" style="display: none;">
+                                <button class="control-btn be-seal be-seal-return" id="slg-return-btn" onclick="returnFromSLG()">返回天山派</button>
+                            </div>
+                        </div>
+
+                        <button class="viewport-dock-gear" id="viewport-dock-gear" type="button"
+                                onclick="toggleViewportDock()" aria-label="菜单" title="菜单"
+                                aria-expanded="false" aria-controls="viewport-dock-menu">
+                            <svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.65 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.07 7.07 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.3.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- 难度设置弹窗 -->
@@ -612,6 +617,14 @@
                                     <input type="checkbox" id="gs-ui-toggle" onchange="gsOnUIStyle(this)">
                                     <span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span>
                                     <span class="gs-toggle-hint" id="gs-ui-hint">古风</span>
+                                </label>
+                            </div>
+                            <div class="gs-switch-row">
+                                <span class="gs-switch-label">屏幕方向</span>
+                                <label class="gs-toggle-wrap">
+                                    <input type="checkbox" id="gs-layout-toggle" onchange="gsOnLayoutMode(this)">
+                                    <span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span>
+                                    <span class="gs-toggle-hint" id="gs-layout-hint">竖屏</span>
                                 </label>
                             </div>
                             <div class="gs-switch-row">
@@ -1217,9 +1230,6 @@
                     江湖路远，故事未始...
                 </div>
                 
-                <!-- 展开/收起按钮 -->
-                <button class="story-expand-btn" id="story-expand-btn" onclick="toggleStoryExpand()">▼ 展开全文</button>
-
                 <!-- 流式生成控件 -->
                 <div id="stream-controls" style="display:none; justify-content:center; align-items:center; padding:6px 0;">
                     <button id="stream-stop-btn" onclick="pipeline.abortCurrentTurn()" style="
@@ -1263,6 +1273,22 @@
                     <button class="battle-action-btn flee" onclick="fleeBattle()">放弃战斗</button>
                 </div>
             </div>
+
+            <!-- 自由行动输入框（文本区最下方）：第一行=输入框+发送/重生成，第二行=展开/收起按钮 -->
+            <div class="free-action-container">
+                <div class="free-action-row">
+                    <textarea
+                        class="free-action-input"
+                        id="free-action-input"
+                        placeholder="输入自由行动内容"
+                        rows="1"
+                    ></textarea>
+                    <button class="free-action-send-btn" id="regenerate-btn" onclick="handleRegenerate()">重生成</button>
+                    <button class="free-action-send-btn" id="free-action-send-btn" onclick="sendFreeAction()">发送</button>
+                </div>
+                <!-- 展开/收起按钮：输入行之下，文本区最底部 -->
+                <button class="story-expand-btn" id="story-expand-btn" onclick="toggleStoryExpand()">▼ 展开全文</button>
+            </div>
         </div>
     </div>
 
@@ -1296,7 +1322,7 @@
     <script src="module/skill-list.js"></script>
     <script src="module/game-utils.js"></script>
     <script src="module/game-state.js"></script>
-    <script src="module/game-ui.js"></script>
+    <script src="module/game-ui.js?v=ui-click-title-2"></script>
     <script src="module/game-helpers.js"></script>
     <script src="module/game-events.js"></script>
     <script src="module/special-event.js"></script>
@@ -3248,6 +3274,10 @@ const outPut = `
                     button.classList.remove('active');
                 });
             }
+            // 点击面板之外收起右下角控制面板
+            if (!event.target.closest('.viewport-dock')) {
+                toggleViewportDock(false);
+            }
         });
 
         // 存档功能
@@ -4864,6 +4894,13 @@ function buildSaveName() {
             if (uiToggle) uiToggle.checked = (style === 1);
             if (uiHint)   uiHint.textContent = (style === 1) ? '扁平' : '古风';
 
+            // 屏幕方向
+            const layout = (typeof layoutMode !== 'undefined') ? layoutMode : 0;
+            const layoutToggle = document.getElementById('gs-layout-toggle');
+            const layoutHint   = document.getElementById('gs-layout-hint');
+            if (layoutToggle) layoutToggle.checked = (Number(layout) === 1);
+            if (layoutHint)   layoutHint.textContent = (Number(layout) === 1) ? '横屏' : '竖屏';
+
             // CG 内容
             const cg = (typeof cgContentEnabled !== 'undefined') ? cgContentEnabled : false;
             const cgToggle = document.getElementById('gs-cg-toggle');
@@ -4966,6 +5003,65 @@ function buildSaveName() {
             applyUIStyle(uiStyle);
             updateUIStyleLabel();
             document.getElementById('gs-ui-hint').textContent = uiStyle === 1 ? '扁平' : '古风';
+        }
+
+        // 竖屏/横屏：竖屏=上下三段（视窗/按钮已在视窗内/文本），横屏=视窗在左、文本在右
+        function gsOnLayoutMode(el) {
+            layoutMode = el.checked ? 1 : 0;
+            applyLayoutMode(layoutMode);
+            const hint = document.getElementById('gs-layout-hint');
+            if (hint) hint.textContent = layoutMode === 1 ? '横屏' : '竖屏';
+        }
+
+        // 应用布局并同步 APK Activity 的真实屏幕方向；普通浏览器只调整页面布局。
+        let _gameOrientationPlugin = null;
+        function refitLayoutModals() {
+            requestAnimationFrame(() => {
+                document.querySelectorAll('.modal').forEach(modal => {
+                    const visible = modal.style.display && modal.style.display !== 'none';
+                    if (visible && typeof fitModalToViewport === 'function') fitModalToViewport(modal);
+                });
+            });
+        }
+        function applyLayoutMode(mode) {
+            const landscape = Number(mode) === 1;
+            document.body.classList.toggle('layout-landscape', landscape);
+            document.body.classList.toggle('layout-portrait', !landscape);
+            const cap = window.Capacitor;
+            if (cap && typeof cap.getPlatform === 'function' && cap.getPlatform() === 'android') {
+                try {
+                    // 普通 HTML APK 使用 Android 注入的 Plugins 代理；registerPlugin 仅存在于打包版 JS runtime。
+                    if (!_gameOrientationPlugin) {
+                        _gameOrientationPlugin = cap.Plugins && cap.Plugins.GameOrientation;
+                        if (!_gameOrientationPlugin && typeof cap.registerPlugin === 'function') {
+                            _gameOrientationPlugin = cap.registerPlugin('GameOrientation');
+                        }
+                    }
+                    if (!_gameOrientationPlugin) throw new Error('GameOrientation plugin is not installed');
+                    _gameOrientationPlugin.lock({ orientation: landscape ? 'landscape' : 'portrait' })
+                        .catch(error => console.warn('[Layout] Android orientation lock failed:', error));
+                } catch (error) {
+                    console.warn('[Layout] Android orientation bridge unavailable:', error);
+                }
+            }
+            refitLayoutModals();
+        }
+        // 原生旋转异步完成，必须在真实窗口 resize 后再次定位弹窗。
+        window.addEventListener('resize', refitLayoutModals, { passive: true });
+
+        // 视窗右下角控制面板开关（齿轮向左展开四枚按钮）
+        function toggleViewportDock(force) {
+            const dock = document.getElementById('viewport-dock');
+            if (!dock) return;
+            const open = (typeof force === 'boolean') ? force : !dock.classList.contains('open');
+            dock.classList.toggle('open', open);
+            const gear = document.getElementById('viewport-dock-gear');
+            if (gear) gear.setAttribute('aria-expanded', open ? 'true' : 'false');
+            if (!open) {
+                // 收起面板时同步收起内部下拉菜单
+                dock.querySelectorAll('.dropdown-menu').forEach(d => d.classList.remove('show'));
+                dock.querySelectorAll('.dropdown-toggle').forEach(b => b.classList.remove('active'));
+            }
         }
 
         async function gsOnCgContent(el) {
@@ -5736,6 +5832,10 @@ function buildSaveName() {
             if (typeof applyUIStyle === 'function') {
                 applyUIStyle((typeof uiStyle !== 'undefined') ? uiStyle : 0);
             }
+            // 初始化屏幕方向（竖屏/横屏）
+            if (typeof applyLayoutMode === 'function') {
+                applyLayoutMode((typeof layoutMode !== 'undefined') ? layoutMode : 0);
+            }
             // 初始化完成后应用字体档位
             try { applyFontLevel((typeof textFontLevel !== 'undefined' && textFontLevel) ? textFontLevel : 2); } catch(_){}
             // 初始化时更新自由行动输入框状态
@@ -5757,13 +5857,7 @@ function buildSaveName() {
             if (window.GameSceneBridge) GameSceneBridge.start();
         };
         
-        // 自由行动输入框事件
-        document.getElementById('free-action-input').addEventListener('input', function() {
-            this.style.height = 'auto';
-            const scrollHeight = this.scrollHeight;
-            this.style.height = Math.min(scrollHeight, 120) + 'px';
-        });
-        
+        // 自由行动输入框事件（输入框高度由 CSS 固定，多行内容内部滚动）
         document.getElementById('free-action-input').addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();

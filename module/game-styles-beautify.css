@@ -668,7 +668,8 @@ body.ui-style-ancient .cheat-section h4 {
     border-bottom: none; /* 覆盖主题的下边框线 */
     background-color: var(--paper-base, #f4f0e6);
     background-image: url('../assets/image/static/水墨笔触2.png');
-    background-size: 100% 100%;
+    background-size: contain; /* 保持图片原始比例，长标题也不压扁笔触 */
+    background-position: left center;
     background-repeat: no-repeat;
     background-blend-mode: multiply; /* 白底融掉，弧形笔触浮现 */
     color: var(--paper-base, #f4f0e6) !important; /* 对抗主题 stats-group h3 的墨色 !important */
@@ -676,6 +677,13 @@ body.ui-style-ancient .cheat-section h4 {
     margin: -4px 0 14px -0.6em;
     transform: rotate(-1.6deg);
     letter-spacing: 3px;
+    /* 弹窗变宽（横屏横向突破）时 flex 列默认会把标题拉伸到整行，把墨痕背景拉扁拉长：
+       align-self:flex-start 让标题牌按内容收缩，背景不再被拉伸 */
+    align-self: flex-start;
+    /* 纸色反白标题加黑色描边，横竖屏都在深色笔触上保持清晰 */
+    -webkit-text-stroke: 1.5px var(--ink-black, #1a1a1a);
+    paint-order: stroke fill; /* 先画黑边再填白字，避免描边吃掉白色笔画 */
+    text-shadow: 0 0 1px rgba(0, 0, 0, 0.5);
 }
 
 /* --- 4.7 剧情区：边框.png 枯笔框 + 山水背景层贴底 ---

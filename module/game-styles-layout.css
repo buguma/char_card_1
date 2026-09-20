@@ -1,0 +1,400 @@
+/**
+ * game-styles-layout.css - 界面布局迭代层
+ *
+ * 仅承载「布局/位置/尺寸比例」相关的新增规则，不重定义古风/扁平两套皮肤的外观：
+ *   1) 视窗 HUD：右下角齿轮按钮 + 向左展开的属性查看/系统设置/历史管理/跳过一周（返回门派）
+ *      —— 四枚主按钮永远从左到右单排，每枚宽高比 ≈3.5:1，整行约占视窗宽度 90%，
+ *         并随视窗尺寸等比缩放；向上弹出的二级下拉按钮同宽同逻辑等比缩放。
+ *   2) 自由行动输入栏位于文本区最下方：第一行 = 输入框(60%) + 发送/重生成(各约20%，3:1)，
+ *      第二行 = 展开全文/收起按钮（正常文档流，文本区最底部）。
+ *   3) 横屏模式（body.layout-landscape）：视窗在左占 60% 宽、文本区在右占 40% 宽，
+ *      视窗按 1.46 保持宽高比并贴紧文本区（无空隙）；文本区贴边、翻页箭头贴边。
+ *
+ * 本文件在 index.html 中最后加载（晚于 game-styles.css / theme / beautify），
+ * 因此同特异度规则以本文件为准；需要压过带 !important 的旧规则时同写 !important。
+ */
+
+/* ============================================================
+ * 1. 视窗 HUD（视窗右下角控制面板）
+ * ============================================================ */
+
+/* 承载层：铺满视窗，只做定位/层级/容器查询，本身不吃鼠标事件 */
+.viewport-dock-layer {
+    position: absolute;
+    inset: 0;
+    /* 层级：高于 SLG 场景/NPC 图层(1~10)、NPC 选框层(50)、流式遮罩(900)；
+       低于难度/设置/背包等弹窗(2000+)与小游戏弹窗(3000)。
+       因此 GameMode=1 时不会被 CG/场景/NPC 图层遮住，弹窗打开时仍在其下方。 */
+    z-index: 950;
+    /* 用视窗自身尺寸作为容器查询单位（cqw/cqh 以视窗宽高为准） */
+    container-type: size;
+    pointer-events: none;
+}
+
+.viewport-dock {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: clamp(6px, 1.2cqw, 10px);
+    pointer-events: none;
+}
+
+/* 展开区：四枚按钮在齿轮左侧，始终单排（不换行），整行约占视窗宽度 90%。
+    90cqw 在足够宽时成立；窄视窗下让开齿轮占位（calc(100% - 34px)），
+    保证按钮行永不压住齿轮、也永不换行。 */
+#viewport-dock-menu {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    gap: clamp(4px, 1cqw, 10px);
+    flex: 0 1 auto;
+    min-width: 0;
+    width: min(90cqw, calc(100% - 34px));
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(14px);
+    transition: opacity 0.18s ease, transform 0.18s ease, visibility 0s linear 0.18s;
+    pointer-events: none;
+}
+
+.viewport-dock.open #viewport-dock-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    transition: opacity 0.18s ease, transform 0.18s ease, visibility 0s;
+}
+
+.viewport-dock.open #viewport-dock-menu > * {
+    pointer-events: auto;
+}
+
+/* 四枚按钮等宽平分展开区；min-width:0 让 .control-btn 的 overflow:hidden 允许自由收窄 */
+#viewport-dock-menu > * {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* 四枚主按钮统一 ≈3.5:1 宽高比，随视窗等比缩放。
+    用 ID+class 压过古风 .be-seal 的 min-height（44px / 3.1em）与旧 padding 固定值。 */
+#viewport-dock-menu .control-btn {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 3.5 / 1;
+    min-height: 0;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.5em;
+    font-size: clamp(11px, 2.4cqw, 16px);
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 「跳过一周 / 返回门派」包一层 wrapper，与下拉按钮同构：
+   让带 aspect-ratio 的印章按钮以「width:100% + 定高由比例推出」的方式排版。 */
+.dock-btn-wrap > .control-btn {
+    width: 100%;
+}
+
+/* 下拉菜单：与触发按钮等宽、向上展开；按视窗高度限高，超高时菜单内部滚动。
+   覆盖扁平皮肤的 max-content/居中/260px 封顶，保证二级按钮与主按钮同宽等比。 */
+.viewport-dock .dropdown-menu {
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    translate: none;
+    box-sizing: border-box;
+    max-height: 58cqh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+body.ui-style-flat .viewport-dock .dropdown-menu,
+body.ui-style-ancient .viewport-dock .dropdown-menu {
+    left: 0;
+    right: 0;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    translate: none;
+}
+
+/* 二级下拉按钮：与主按钮同宽、随视窗等比缩放（字体/内边距用 cqw，不用固定 px） */
+.viewport-dock .dropdown-item {
+    width: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+    padding: 0.45em 0.7em;
+    font-size: clamp(11px, 2cqw, 14px);
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.ui-style-ancient .viewport-dock .dropdown-item {
+    min-height: 0;
+    padding: 0.45em 0.7em !important;
+    font-size: clamp(11px, 2cqw, 14px) !important;
+}
+
+body.ui-style-flat .viewport-dock .dropdown-item {
+    padding: 0.45em 0.7em !important;
+}
+
+/* 悬停不再右移（主题层 .dropdown-item:hover 的 padding-left:25px 会撑坏等比） */
+.viewport-dock .dropdown-item:hover {
+    padding-left: 0.7em !important;
+}
+
+/* 齿轮按钮：完全对齐 3D 场景「镜头归位」按钮（.scene3d-reset）的样式与外观 */
+.viewport-dock-gear {
+    flex: 0 0 auto;
+    width: clamp(20px, 2.4vw, 24px);
+    height: clamp(20px, 2.4vw, 24px);
+    min-height: 0;
+    padding: 3px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    color: #403729;
+    background: #f4ecdded;
+    box-shadow: 0 1px 4px rgba(20, 20, 20, 0.28);
+    cursor: pointer;
+    pointer-events: auto;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.viewport-dock-gear svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    transition: transform 0.2s ease;
+}
+
+.viewport-dock-gear:hover {
+    background: #f8f2e4;
+}
+
+.viewport-dock-gear:focus-visible {
+    outline: 2px solid #a47435;
+    outline-offset: 2px;
+}
+
+/* 展开时齿轮轻微旋转，作为开合状态提示 */
+.viewport-dock.open .viewport-dock-gear svg {
+    transform: rotate(60deg);
+}
+
+/* 小游戏/全屏 iframe 界面（战斗、炼丹、21点、种植、世界地图、悬赏）不显示本面板。 */
+#blackjack-modal[style*="block"] ~ .viewport-dock-layer,
+#battle-modal[style*="block"] ~ .viewport-dock-layer,
+#farm-modal[style*="block"] ~ .viewport-dock-layer,
+#alchemy-modal[style*="block"] ~ .viewport-dock-layer,
+#worldmap-modal[style*="block"] ~ .viewport-dock-layer,
+#bounty-modal[style*="block"] ~ .viewport-dock-layer {
+    display: none !important;
+}
+
+/* ============================================================
+ * 2. 自由行动输入栏：文本区最下方（展开/收起按钮在输入行之下）
+ * ============================================================ */
+
+/* 文本区作为容器，让输入行/按钮用 cqw 按文本区自身宽度等比缩放 */
+.story-area {
+    container-type: inline-size;
+}
+
+/* 输入栏容器改为纵向两行：第一行 = 输入框 + 发送/重生成，第二行 = 展开/收起按钮。
+   去掉旧「绝对定位展开按钮悬挂在 wrapper 外」所需的 36px 预留，收紧留白。 */
+.story-area > .free-action-container,
+body.ui-style-ancient .story-area > .free-action-container,
+body.ui-style-flat .story-area > .free-action-container {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: clamp(6px, 1cqw, 10px);
+    padding: clamp(8px, 1.5cqw, 14px);
+    margin-top: 0 !important;
+    box-sizing: border-box;
+}
+
+/* 第一行：输入框 + 发送/重生成，横排不换行（垂直居中，各自按宽高比定高） */
+.free-action-row {
+    display: flex;
+    align-items: center;
+    gap: clamp(6px, 1cqw, 10px);
+    width: 100%;
+    min-width: 0;
+}
+
+/* 输入框固定占 60%、宽高比 7:1，不随页面拉伸形变，多行内容内部滚动 */
+.free-action-row .free-action-input {
+    flex: 0 0 60%;
+    width: 60%;
+    min-width: 0;
+    min-height: 0;
+    max-height: none;
+    height: auto;
+    aspect-ratio: 7 / 1;
+    padding: 0 clamp(8px, 1.4cqw, 14px);
+    font-size: clamp(12px, 2.2cqw, 15px);
+    line-height: 1.1;
+    box-sizing: border-box;
+}
+
+/* 发送/重生成：各占约 20%，宽高比 3:1（压过主题层 min-height/padding/flex 固定值） */
+.free-action-row .free-action-send-btn,
+body.ui-style-ancient .free-action-row :is(#free-action-send-btn, #regenerate-btn),
+body.ui-style-flat .free-action-row :is(#free-action-send-btn, #regenerate-btn) {
+    flex: 1 1 0 !important;
+    min-width: 0;
+    width: auto;
+    height: auto !important;
+    min-height: 0 !important;
+    aspect-ratio: 3 / 1;
+    align-self: center;
+    padding: 0 0.6em !important;
+    font-size: clamp(11px, 2cqw, 15px) !important;
+    line-height: 1.2;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+
+/* 展开/收起按钮：输入行之下、文本区最底部（保持小按钮自身比例，居中不拉伸）。
+   覆盖旧 .story-expand-btn 的 absolute + translateX(-50%)（含 hover/active）。 */
+.story-area > .free-action-container .story-expand-btn,
+.story-area > .free-action-container .story-expand-btn:hover,
+.story-area > .free-action-container .story-expand-btn:active {
+    position: static !important;
+    left: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+    width: auto !important;
+    align-self: center;
+    margin: 0 !important;
+    box-sizing: border-box;
+    padding: clamp(4px, 0.8cqw, 8px) clamp(14px, 2.4cqw, 26px) !important;
+    font-size: clamp(11px, 1.8cqw, 14px);
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+/* 展开按钮已入流，故事内容 wrapper 不再需要为它预留底部空白 */
+.story-content-wrapper {
+    padding-bottom: 10px;
+}
+
+/* ============================================================
+ * 3. 横屏模式：视窗在左、文本区在右（body.layout-landscape）
+ *    视窗上下填满页面（保持 1.46），右侧剩余宽度全给文本区
+ * ============================================================ */
+
+body.layout-landscape {
+    height: 100%;
+    overflow: hidden;
+}
+
+/* 视窗与文本区贴紧（无空隙） */
+body.layout-landscape .container {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+}
+
+/* 视窗优先：上下填满页面，宽度按 1.46 推出，贴右（紧贴文本区）。
+   显式 width/flex-basis（覆盖旧 .viewport-wrapper 的 width:100%）确保只占 1.46×高。 */
+body.layout-landscape .viewport-wrapper {
+    flex: 0 0 calc(100dvh * 1.46);
+    width: calc(100dvh * 1.46);
+    max-width: none;
+    height: 100%;
+    margin: 0;
+    display: flex;
+    align-items: stretch;
+    overflow: hidden;
+}
+
+body.layout-landscape .viewport {
+    flex: 0 0 auto;
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 1.46;
+    margin: 0;
+}
+
+/* 文本区吃掉右侧剩余宽度：贴边无横向 padding，纵向 flex column（内容滚动、输入栏固定底部） */
+body.layout-landscape .story-area {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    max-width: none;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    /* 供输入栏换行的容器查询（按文本列实际宽度而非窗口宽度判断） */
+    container-type: inline-size;
+}
+
+/* 故事内容在此滚动。
+   设 position:static 让翻页箭头/页码指示器以 .story-area（position:relative）为定位基准，
+   从而固定贴在文本列中部、不随故事内容滚动，横屏下点击左右翻页位置稳定可用。 */
+body.layout-landscape .story-content-wrapper {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 10px;
+    position: static;
+}
+
+/* 输入栏：flex 固定在文本区底部，不参与上方滚动 */
+body.layout-landscape .story-area > .free-action-container {
+    flex: 0 0 auto;
+    margin-top: 0 !important;
+}
+
+/* 翻页箭头：横屏下贴文本区左右边缘，固定垂直居中、不随内容滚动 */
+body.layout-landscape .story-nav-btn {
+    width: 22px;
+    height: 34px;
+    font-size: 12px;
+    top: 50%;
+}
+
+body.layout-landscape .story-nav-btn.prev {
+    left: 0;
+}
+
+body.layout-landscape .story-nav-btn.next {
+    right: 0;
+}
+
+/* 正文给贴边箭头留出刚好够的左右内边距，去掉多余的横向留白 */
+body.layout-landscape .story-text {
+    padding-left: 26px;
+    padding-right: 26px;
+    font-size: clamp(0.8rem, 2.2cqw, 1.05rem);
+}

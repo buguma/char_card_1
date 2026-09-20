@@ -23,21 +23,24 @@ function host() {
     createElement:()=>new Element(),createTextNode:textContent=>({textContent}),getElementById:id=>elements.get(id),addEventListener(){},
     querySelectorAll:s=>s==='#main-viewport > .scene.active'?[...elements.values()].filter(e=>e.classes.has('active')):s==='#main-viewport > .scene'?[...elements.values()].filter(e=>e.id.endsWith('-scene')):[],
     querySelector(s){return this.querySelectorAll(s)[0];}};
-  const renderer={visible:true,renderEnabled:true,interactionEnabled:true,
-    setVisible(v){this.visible=v;},setRenderEnabled(v){this.renderEnabled=v;},setInteractionEnabled(v){this.interactionEnabled=v;},clearSelection(){},resize(){},destroy(){},
-    applyState(s){const d=deferred();calls.push({s,...d});return d.promise;},getDiagnostics(){return {visible:this.visible,renderEnabled:this.renderEnabled,interactionEnabled:this.interactionEnabled};},
-    retry(){throw Error('Direct retry must not bypass apply');}};
+  const mounts=[];
+  const createRenderer=()=>({visible:true,renderEnabled:true,interactionEnabled:true,destroyed:false,
+    setVisible(v){this.visible=v;},setRenderEnabled(v){this.renderEnabled=v;},setInteractionEnabled(v){this.interactionEnabled=v;},clearSelection(){},resize(){},destroy(){this.destroyed=true;},
+    applyState(s){assert.equal(this.destroyed,false,'Never apply to a destroyed renderer');const d=deferred();calls.push({s,renderer:this,...d});return d.promise;},getDiagnostics(){return {visible:this.visible,renderEnabled:this.renderEnabled,interactionEnabled:this.interactionEnabled,destroyed:this.destroyed};},
+    retry(){throw Error('Direct retry must not bypass apply');}});
+  const renderer=createRenderer();
+  const mountRenderer=(_root,options)=>{const instance=mounts.length?createRenderer():renderer;mounts.push({renderer:instance,event:options.onEvent});return instance;};
   const sandbox={document,location:{protocol:'http:'},URL,queueMicrotask,console,innerWidth:800,innerHeight:600,
     setTimeout:(fn,ms)=>{const id=setTimeout(fn,ms);id.unref();timers.add(id);return id;},clearTimeout,
     matchMedia:()=>({matches:false}),getComputedStyle:()=>({display:'block',visibility:'visible'}),MutationObserver:class{observe(){}},addEventListener(){},
-    localStorage:{getItem:()=>null,setItem(){}},renderer};sandbox.window=sandbox;
+    localStorage:{getItem:()=>null,setItem(){}},mountRenderer};sandbox.window=sandbox;
   const ctx=vm.createContext(sandbox);
   vm.runInContext("let GameMode=0,userLocation='tianshanpai',inputEnable=1;",ctx);
-  vm.runInContext(source.replace('    window.GameSceneBridge =', '    window.__test = { install() { view = renderer; preferences.enabled = true; }, onEvent, abortTurn };\n    window.GameSceneBridge ='),ctx);
+  vm.runInContext(source.replace('    window.GameSceneBridge =', '    window.__test = { install() { release = { module: { mount: mountRenderer }, base: document.baseURI }; preferences.enabled = true; }, onEvent, abortTurn };\n    window.GameSceneBridge ='),ctx);
   const bridge=sandbox.GameSceneBridge;bridge.start();sandbox.__test.install();
   const navigate=(id,force=false)=>{for(const e of elements.values())e.classes.delete('active');elements.get(id+'-scene').classes.add('active');vm.runInContext(`userLocation=${JSON.stringify(id==='map'?'tianshanpai':id)}`,ctx);bridge.notify('navigate',force);};
   const complete=(index,status='applied')=>{const c=calls[index];c.resolve({status,epoch:c.s.sessionEpoch,revision:c.s.revision,sceneId:c.s.sceneId});};
-  return {bridge,renderer,calls,animations,elements,document,navigate,complete,
+  return {bridge,renderer,mounts,calls,animations,elements,document,navigate,complete,
     event: e=>sandbox.__test.onEvent(e),run:s=>vm.runInContext(s,ctx),
     cleanup(){sandbox.__test.abortTurn();timers.forEach(clearTimeout);}};
 }
@@ -90,6 +93,48 @@ test('special pages abort immediately and stale cover cannot revive the renderer
  g.navigate('player-stats');await drain();assert.equal(g.bridge.getDiagnostics().snapshot.visible,false);assert.equal(g.renderer.visible,false);assert.equal(g.elements.get('main-viewport').dataset.scene3dTurning,undefined);
  animation.finish();await drain();assert.equal(g.calls.length,1);assert.equal(g.bridge.getDiagnostics().readyScene,null);
 });
+for (const destination of ['map','cangjingge']) test(`context loss during restore hold recovers ${destination} and rejects obsolete renderer callbacks`,async t=>{
+ const g=host();t.after(()=>g.cleanup());await ready(g);
+ const original=g.mounts[0],before=g.bridge.getDiagnostics();
+ g.bridge.setBusy('generation',true);await drain();
+ const heldCalls=g.calls.length;
+ g.run(`userLocation=${JSON.stringify(destination==='map'?'tianshanpai':destination)}`);
+ g.bridge.afterRestore('snapshot-restored',true);await drain();
+ assert.ok(g.bridge.getDiagnostics().epoch>before.epoch);
+ assert.equal(g.bridge.getDiagnostics().readyScene,'main','Restore retains the last frame');
+ assert.equal(g.calls.length,heldCalls,'Locked restore must not forward its epoch');
+ assert.equal(g.animations.length,0,'Locked restore must not begin a turn');
+ const lost={type:'error',code:'CONTEXT_LOST',epoch:before.epoch,revision:before.revision,sceneId:'main'};
+ original.event(lost);await drain();
+ assert.equal(original.renderer.destroyed,true,'Current instance loss is accepted despite its old epoch');
+ assert.equal(g.bridge.getDiagnostics().renderer,null);
+ assert.equal(g.bridge.getDiagnostics().readyScene,null);
+ assert.equal(g.elements.get('sect-3d-root').hidden,true);
+ assert.equal(g.elements.get('main-viewport').dataset.scene3dReady,undefined);
+ assert.equal(g.bridge.getDiagnostics().errors.length,1);
+ // The token is already revoked, even before a replacement mounts.
+ original.event(lost);await drain();
+ assert.equal(g.bridge.getDiagnostics().errors.length,1);
+ g.bridge.setBusy('generation',false);await drain();
+ assert.equal(g.mounts.length,2,'Unlock mounts a replacement instead of reusing the dead handle');
+ assert.equal(g.calls.length,heldCalls+1);
+ const replacement=g.mounts[1],latest=g.calls.length-1;
+ assert.equal(g.calls[latest].renderer,replacement.renderer);
+ assert.equal(g.calls[latest].s.sessionEpoch,g.bridge.getDiagnostics().epoch);
+ assert.equal(g.calls[latest].s.sceneId,destination==='map'?'main':'library');
+ g.complete(latest);await drain();
+ assert.equal(g.bridge.getDiagnostics().readyScene,destination==='map'?'main':'library');
+ assert.equal(g.elements.get('main-viewport').dataset.scene3dTurning,undefined,'Recovery cannot strand a covering sheet');
+ // Even a current-epoch event cannot authorize an obsolete renderer instance.
+ const current=g.bridge.getDiagnostics();
+ original.event({...lost,epoch:current.epoch,revision:current.revision});await drain();
+ assert.equal(replacement.renderer.destroyed,false);
+ assert.equal(g.bridge.getDiagnostics().counters.destroys,1);
+ assert.equal(g.bridge.getDiagnostics().errors.length,1);
+ assert.equal(g.bridge.getDiagnostics().readyScene,current.readyScene);
+ assert.equal(g.elements.get('main-viewport').dataset.scene3dReady,'true');
+});
+
 test('overlay locks and restore invalidation remain timely during a pending load',async t=>{
  const g=host();t.after(()=>g.cleanup());await ready(g);g.navigate('cangjingge');await drain();await cover(g);
  g.run('inputEnable=0');g.bridge.notify('overlay');await drain();assert.equal(g.renderer.renderEnabled,false);assert.equal(g.bridge.getDiagnostics().snapshot.interactive,false);

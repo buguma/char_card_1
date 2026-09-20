@@ -29,8 +29,8 @@
     // chosen by the UI (nor auto-detected), so a legacy v1 value is not a user choice.
     const PREF_SCHEMA = 2;
     let started = false, epoch = 1, revision = 0, life = 0, queued = false, forceNext = false;
-    let turn = null, pendingApply = null, retryPending = false;
-    let root, viewport, notice, view = null, importTask = null, release = null, unloadTimer = null;
+    let turn = null, pendingApply = null, retryPending = false, restoreHold = false;
+    let root, viewport, notice, view = null, viewToken = null, importTask = null, release = null, unloadTimer = null;
     let preferences = null, last = null, fingerprint = '', readyScene = null;
     let preciseTime = null, menu = null, settings = null, observer = null;
     let page = null, pageAnimation = null;
@@ -111,6 +111,7 @@
             visible, renderEnabled: visible && !blocks.filter(reason => reason !== 'scene-menu').length, interactive: visible && !blocks.length, blockReasons: blocks, rosterError };
     }
     function clearReady() {
+        restoreHold = false;
         readyScene = null;
         if (viewport) viewport.removeAttribute('data-scene3d-ready');
         if (root) root.hidden = true;
@@ -246,7 +247,7 @@
         });
     }
     async function destroyView() {
-        const old = view; view = null;
+        const old = view; view = null; viewToken = null;
         pendingApply = null; abortTurn();
         clearReady();
         if (old) { counters.destroys++; await old.destroy(); }
@@ -318,7 +319,9 @@
         const assets = await loadRelease();
         if (expectedLife !== life || !last?.visible || !last.renderEnabled) return null;
         if (!view) {
-            view = assets.module.mount(root, { protocol: 1, assetBaseUrl: assets.base, quality: preferences.quality, renderScale: preferences.renderScale, msaa: preferences.msaa, shadows: preferences.shadows, atmosphere: preferences.atmosphere, tuning: preferences.tuning, onEvent });
+            const token = {}; viewToken = token;
+            view = assets.module.mount(root, { protocol: 1, assetBaseUrl: assets.base, quality: preferences.quality, renderScale: preferences.renderScale, msaa: preferences.msaa, shadows: preferences.shadows, atmosphere: preferences.atmosphere, tuning: preferences.tuning,
+                onEvent: event => { if (viewToken === token) onEvent(event); } });
             counters.mounts++;
         }
         return view;
@@ -330,14 +333,20 @@
         // Never retain a scene-menu input lock after its actual UI has disappeared.
         if (menu && (menu.element.isConnected === false || menu.element.hidden || !menu.element.classList.contains('show'))) closeMenu();
         const next = snapshot();
-        // Main-map status belongs to the host. Reserve its real layout height so
-        // world-projected roof labels cannot disappear under the date/energy bar.
-        const status = next.logicalPage === 'map' && document.querySelector('#map-scene > .status-display');
+        // The ancient header is transparent: render the world behind it instead of
+        // leaving an uncovered paper-colored strip. The opaque flat header still
+        // reserves space so it cannot hide world-projected roof labels.
+        const status = !document.body.classList.contains('ui-style-ancient') && next.logicalPage === 'map' && document.querySelector('#map-scene > .status-display');
         const vp = viewport.getBoundingClientRect();
         const inset = status ? Math.max(0, status.getBoundingClientRect().bottom - vp.top) * viewport.clientHeight / Math.max(1, vp.height) : 0;
         const top = inset + 'px';
-        if (root.style.top !== top) root.style.top = top;
-        const previousScene = last?.sceneId ?? null;
+        // A restored business snapshot may already target a different room while
+        // generation still owns the render lock. Keep the *rendered* scene, its
+        // dimensions and epoch intact until a first frame can actually be drawn.
+        const holdingRestore = restoreHold && next.visible && !next.renderEnabled;
+        const releasingRestore = restoreHold && next.visible && next.renderEnabled;
+        if (!holdingRestore && root.style.top !== top) root.style.top = top;
+        const previousScene = restoreHold ? readyScene : last?.sceneId ?? null;
         const navigating = Boolean(previousScene && next.sceneId && previousScene !== next.sceneId);
         const compare = JSON.stringify({ ...next, revision: 0 });
         const changed = compare !== fingerprint;
@@ -352,6 +361,14 @@
             return;
         }
         clearTimeout(unloadTimer); unloadTimer = null;
+        if (holdingRestore) {
+            // Do not forward the new epoch to runtime.applyState: that cancels its
+            // active scene even when RAF is paused, leaving a blank canvas. Do not
+            // begin a page turn either: its first-frame barrier cannot pass locked.
+            stopDrawing(false);
+            return;
+        }
+        if (releasingRestore) restoreHold = false;
         if (!view && !next.renderEnabled) return;
         // Update locks immediately, even while another call is waiting for cover/load.
         if (!next.renderEnabled) stopDrawing(false);
@@ -564,7 +581,10 @@
             && (typeof npcVisibility === 'undefined' || npcVisibility[npcId] !== false);
     }
     function onEvent(event) {
-        if (!last || event.epoch !== epoch) return;
+        // Context loss belongs to the renderer instance, not a business epoch.
+        // During restoreHold the live renderer intentionally has the older epoch;
+        // mount's token filter still rejects callbacks from destroyed instances.
+        if (!last || (event.epoch !== epoch && !(event.type === 'error' && event.code === 'CONTEXT_LOST'))) return;
         if (event.type === 'ready') {
             // Events can arrive before applyState settles (or from cancelled loads).
             // Publication belongs exclusively to the versioned apply completion above.
@@ -586,10 +606,23 @@
         displayed.set(locationId, Array.from(ids)); notify('npc-display');
     }
     function afterRestore(reason, preserveSpecial) {
-        invalidate(reason); epoch++; preciseTime = null;
         const active = document.querySelector('#main-viewport > .scene.active');
         const special = active && ['player-stats-scene', 'relationships-scene'].includes(active.id);
         const target = currentLocation() === 'tianshanpai' ? 'map' : currentLocation();
+        // Restore business state immediately, but retain the last rendered scene
+        // throughout generation (including main -> previous room rollback). The new
+        // epoch must reach the renderer only after rendering is unlocked in apply().
+        // Host life/epoch still advance now, rejecting every stale load and intent.
+        const keepFrame = reason === 'snapshot-restored' && preferences?.enabled && currentMode() === 0
+            && Object.hasOwn(locations, target) && view && !turn && readyScene
+            && (restoreHold || readyScene === locations[active?.id?.replace(/-scene$/, '')])
+            && viewport?.dataset.scene3dReady === 'true' && !root.hidden;
+        if (keepFrame) {
+            life++; restoreHold = true;
+            stopDrawing(false); closeMenu();
+            if (notice) notice.hidden = true;
+        } else invalidate(reason);
+        epoch++; preciseTime = null;
         if (!(preserveSpecial && special) && Object.hasOwn(locations, target) && (active?.id !== target + '-scene' || active.classList.contains('slg-mode') !== (currentMode() === 1))) {
             document.querySelectorAll('#main-viewport > .scene').forEach(el => el.classList.remove('active', 'slg-mode'));
             const next = document.getElementById(target + '-scene');

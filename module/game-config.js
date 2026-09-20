@@ -948,6 +948,7 @@ const defaultGameData = {
     userOriginDesc: "", // 自定义出身时的背景描述（userBackground===E时生效）
     textFontLevel: 2, // 新增：正文字体档位（1~5），默认第二档
     uiStyle: 0, // 新增：UI风格（0=古风UI，1=扁平化UI）
+    layoutMode: 0, // 新增：屏幕方向（0=竖屏，1=横屏：视窗在左、文本区在右）
     playerTalents: { "根骨": 25, "悟性": 25, "心性": 25, "魅力": 25 },
     playerStats:   { "武学": 20, "学识": 20, "声望": 20, "金钱": 500 },
     combatStats:   { "攻击力": 20, "生命值": 50, "暴击率": 10, "暴击伤害": 150, "格挡": 0, "穿甲": 0, "回转": 0, "吸血": 0, "反伤": 0 },

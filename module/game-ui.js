@@ -686,6 +686,8 @@ function updateStoryDisplay() {
     const nextBtn = document.getElementById('story-next-btn');
     const expandBtn = document.getElementById('story-expand-btn');
     const viewport = document.getElementById('main-viewport');
+    // 正文翻页点击区挂在整块故事滚动区上（横屏下文本区较高，正文只占顶部一截，光点正文下半区会点不到）
+    const storyWrapper = storyElement ? storyElement.parentElement : null;
     
     // 只在非展开模式或非SLG模式时清除图层
     if (!isStoryExpanded || GameMode !== 1) {
@@ -702,6 +704,7 @@ function updateStoryDisplay() {
     }
     
     storyElement.onclick = null;
+    if (storyWrapper) storyWrapper.onclick = null;
     
     if (isStoryExpanded) {
         // 展开模式
@@ -737,9 +740,12 @@ function updateStoryDisplay() {
         
         // 翻页控件逻辑
         if (storyPages.length > 1) {
+            if (storyWrapper) storyWrapper.style.cursor = 'pointer';
             storyElement.style.cursor = 'pointer';
-            storyElement.onclick = function(e) {
-                const rect = storyElement.getBoundingClientRect();
+            if (storyWrapper) storyWrapper.onclick = function(e) {
+                // 点翻页箭头/页码点/流式按钮时交给自己处理，不再走正文翻页
+                if (e.target && e.target.closest && e.target.closest('.story-nav-btn, .page-indicator, #stream-controls')) return;
+                const rect = storyWrapper.getBoundingClientRect();
                 const clickX = e.clientX - rect.left;
                 const width = rect.width;
                 
@@ -774,7 +780,8 @@ function updateStoryDisplay() {
             }
         } else {
             storyElement.style.cursor = 'default';
-            storyElement.onclick = null;
+            if (storyWrapper) storyWrapper.style.cursor = 'default';
+            if (storyWrapper) storyWrapper.onclick = null;
             
             if (pageIndicator) pageIndicator.style.display = 'none';
             if (prevBtn) prevBtn.style.display = 'none';
@@ -871,16 +878,29 @@ function showConfirmModal(title, message, onConfirm) {
 
 // 更新SLG返回按钮的显示状态
 function updateSLGReturnButton() {
+    // 按钮外层包了 .dock-btn-wrap（与下拉按钮同构，保证等宽），显隐需切到 wrapper 上，
+    // 否则隐藏按钮后空 wrapper 仍占一份 flex 空间
+    const slgReturnWrap = document.getElementById('slg-return-wrap');
+    const skipWeekWrap = document.getElementById('skip-week-wrap');
     const slgReturnBtn = document.getElementById('slg-return-btn');
     const skipWeekBtn = document.getElementById('skip-week-btn');
     
-    if (slgReturnBtn && skipWeekBtn) {
+    if (slgReturnWrap && skipWeekWrap) {
         if (GameMode === 1) {
             // SLG模式：显示返回按钮，隐藏跳过按钮
+            slgReturnWrap.style.display = '';
+            skipWeekWrap.style.display = 'none';
+        } else {
+            // 普通模式：隐藏返回按钮，显示跳过按钮
+            slgReturnWrap.style.display = 'none';
+            skipWeekWrap.style.display = '';
+        }
+    } else if (slgReturnBtn && skipWeekBtn) {
+        // 回退：wrapper 不存在时退回旧版按钮级显隐
+        if (GameMode === 1) {
             slgReturnBtn.style.display = 'block';
             skipWeekBtn.style.display = 'none';
         } else {
-            // 普通模式：隐藏返回按钮，显示跳过按钮
             slgReturnBtn.style.display = 'none';
             skipWeekBtn.style.display = 'block';
         }
@@ -902,17 +922,26 @@ function fitModalToViewport(modal) {
 
     // 长内容弹窗：高度改为“container底边 - viewport顶边”，并允许在遮罩内滚动
     const tallModalIds = ['history-summary-modal', 'skill-library-modal', 'skill-equipment-modal', 'pipeline-log-modal', 'game-settings-modal', 'cheat-modal', 'load-modal', 'api-config-modal', 'prompt-editor-modal', 'wb-editor-modal', 'bounty-modal'];
+    // 横屏（左视窗/右文本）下，文本区在视窗右侧，长弹窗改为“横向突破视窗”——
+    // 从视窗左缘一直铺到 container 右缘，高度仍等于视窗高度。
+    const landscape = !!(document.body && document.body.classList && document.body.classList.contains('layout-landscape'));
     if (tallModalIds.includes(modal.id)) {
         const container = document.querySelector('.container') || document.body;
         const containerRect = container.getBoundingClientRect();
 
-        // 从 #main-viewport 顶边开始，覆盖到整页 container 底边
-        const desiredHeight = Math.max(
-            vpRect.height,                            // 至少不小于viewport
-            containerRect.bottom - vpRect.top        // 覆盖到container底边
-        );
+        if (landscape) {
+            // 横向突破：宽度覆盖“视窗左缘 → container 右缘”，高度不超出视窗
+            targetWidth = Math.max(vpRect.width, containerRect.right - vpRect.left);
+            targetHeight = vpRect.height;
+        } else {
+            // 从 #main-viewport 顶边开始，覆盖到整页 container 底边
+            const desiredHeight = Math.max(
+                vpRect.height,                            // 至少不小于viewport
+                containerRect.bottom - vpRect.top        // 覆盖到container底边
+            );
 
-        targetHeight = Math.max(0, Math.floor(desiredHeight));
+            targetHeight = Math.max(0, Math.floor(desiredHeight));
+        }
         allowScroll = true;
 
         // 固定定位的长弹窗必须落在实际可见视口内；页面container可能比屏幕更高。

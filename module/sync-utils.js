@@ -46,6 +46,7 @@ function syncGameDataFromVariableSystem() {
     if ('compressSummary' in snapshot) gameData.compressSummary = snapshot.compressSummary;
     if ('haveEvent' in snapshot) gameData.haveEvent = snapshot.haveEvent;
     if ('uiStyle' in snapshot) gameData.uiStyle = snapshot.uiStyle;
+    if ('layoutMode' in snapshot) gameData.layoutMode = snapshot.layoutMode;
     if ('alchemyDone' in snapshot) gameData.alchemyDone = snapshot.alchemyDone;
     if ('triggeredEvents' in snapshot) gameData.triggeredEvents = snapshot.triggeredEvents;
     if ('currentSpecialEvent' in snapshot) gameData.currentSpecialEvent = snapshot.currentSpecialEvent;
@@ -104,6 +105,7 @@ function syncGlobalsToTurnVars() {
     variableSystem.set('compressSummary', compressSummary, 'turn');
     variableSystem.set('haveEvent', haveEvent, 'turn');
     variableSystem.set('uiStyle', uiStyle, 'turn');
+    variableSystem.set('layoutMode', layoutMode, 'turn');
     variableSystem.set('alchemyDone', alchemyDone, 'turn');
     variableSystem.set('triggeredEvents', triggeredEvents, 'turn');
     variableSystem.set('currentSpecialEvent', currentSpecialEvent, 'turn');

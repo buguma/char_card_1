@@ -68,6 +68,7 @@ let equipStats = { "攻击力": 0, "生命值": 0, "暴击率": 0, "暴击伤害
 let userBackground = "A"; // 新增：出身编码
 let textFontLevel = 2; // 新增：正文字体档位 1~5
 let uiStyle = 0; // 新增：UI风格（0=古风UI，1=扁平化UI）
+let layoutMode = 0; // 新增：屏幕方向（0=竖屏，1=横屏：视窗在左、文本区在右）
 let dayNightStatus = 'daytime';  // 新增：昼夜状况
 let currentGameTime = '';        // 新增：当前剧情内时间，如 "19:15"
 let seasonStatus = 'winter';      // 新增：四季状况
@@ -222,6 +223,7 @@ function syncVariablesFromGameData() {
     compressSummary,
     haveEvent,         // 新增：随机事件开关
     uiStyle,           // 新增：UI风格
+    layoutMode,        // 新增：屏幕方向（0=竖屏，1=横屏）
     alchemyDone,       // 新增：本周是否已炼丹
     triggeredEvents,   // 新增：已触发的特殊事件ID列表
     currentSpecialEvent, // 新增：当前触发的特殊事件ID
@@ -299,6 +301,7 @@ function syncGameDataFromVariables() {
     gameData.compressSummary = compressSummary;    // 新增：写回存档
     gameData.haveEvent = haveEvent;                // 新增：随机事件开关
     gameData.uiStyle = uiStyle;                    // 新增：UI风格
+    gameData.layoutMode = layoutMode;              // 新增：屏幕方向（0=竖屏，1=横屏）
     gameData.alchemyDone = alchemyDone;            // 新增：本周是否已炼丹
     gameData.triggeredEvents = triggeredEvents;    // 新增：已触发的特殊事件ID列表
     gameData.currentSpecialEvent = currentSpecialEvent;  // 新增：当前触发的特殊事件ID

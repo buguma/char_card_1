@@ -758,6 +758,9 @@ export async function modeMatrix(ctx) {
         }
         await advanceBusinessClock(session.page);
         ctx.server.enqueue(session.channel, await fullResponse({}, '合成返回天山派完成'));
+        // 「返回门派」现已收进视窗右下角齿轮展开的面板，需先展开再点击
+        await stableClick(await session.page.$('#viewport-dock-gear'));
+        await session.page.waitForFunction(() => document.getElementById('viewport-dock').classList.contains('open'));
         await stableClick(await session.page.$('#slg-return-btn'));
         await session.page.waitForFunction(() => !window.__scene3dRead().streaming && window.__scene3dRead().uiConversation.at(-1)?.content.includes('合成返回天山派完成'), { timeout: 60000 });
         await stableClick(await session.page.$('#modal-buttons button[onclick="closeModal()"]'));

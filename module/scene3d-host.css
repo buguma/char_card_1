@@ -3,8 +3,19 @@
 #sect-3d-root[hidden] { display:none !important; }
 /* The original room back button remains the single host navigation control. */
 #sect-3d-root .scene3d-back { display:none !important; }
-/* 镜头归位已改为右下角摄像机图标，尺寸/位置由渲染器 scene3d.css 提供，主机不再覆盖 */
+/* 镜头归位已改为右下角摄像机图标，尺寸/位置由渲染器 scene3d.css 提供 */
+/* 主机新增右下角齿轮控制面板（#viewport-dock）位于同一角落后，镜头归位按钮整体上移一档，
+   让齿轮落在最下方；两者尺寸一致，故用 尺寸+10px 间距 抬升（覆盖冻结交付版本 scene3d.css）。 */
+#sect-3d-root .scene3d-runtime .scene3d-reset {
+  bottom: calc(clamp(20px, 2.4vw, 24px) + 22px);
+}
 #main-viewport[data-scene3d-ready="true"] > .scene.active { background:transparent !important; pointer-events:none; }
+/* 古风 3D 页眉透出场景：移除整条纸色底和纹理，保留文字及各状态的墨痕装饰。
+   仅在 3D 已就绪时覆盖；2D 回退及扁平 UI 保持原样。 */
+body.ui-style-ancient #main-viewport[data-scene3d-ready="true"] .status-display {
+    background: transparent !important;
+    box-shadow: none;
+}
 /* 翻页封面期间整层隐藏 2D 业务场景：业务 2D 场景是在点击处理器里同步切换的
    （goToLocation → switchScene），早于 3D 的 apply()，所以纸页还在往里翻的时候，
    目标场景的标题/人物/按钮就已经透过半透明的纸页露出来了。封面+换场期间把 2D 层

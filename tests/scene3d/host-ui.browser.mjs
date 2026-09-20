@@ -42,7 +42,8 @@ export async function hostUi(ctx) {
     const page=session.page,trace=[],snapshots=[];
     const check=(name,actual,expected)=>{const differences=diff(actual,expected);results.push({label,name,status:differences.length?'FAIL':'PASS',differences});};
     const click=async selector=>{trace.push({action:'click',selector});await clickVisible(page,selector);};
-    const menu=async (id,fn)=>{await click(`.dropdown-toggle[onclick*="${id}-dropdown"]`);await click(button(fn));};
+    const openDock=async()=>{if(!(await page.$eval('#viewport-dock',n=>n.classList.contains('open')))){await click('#viewport-dock-gear');await page.waitForFunction(()=>document.getElementById('viewport-dock').classList.contains('open'));}};
+    const menu=async (id,fn)=>{await openDock();await click(`.dropdown-toggle[onclick*="${id}-dropdown"]`);await click(button(fn));};
     const capture=async name=>{const s=await state(page);snapshots.push({name,state:s});await artifact(ctx.directory,`${label}-${name}.json`,{state:s,diagnostics:await diagnostic(page)});await page.screenshot({path:path.join(ctx.directory,`${label}-${name}.png`)});return s;};
     const paused=async selector=>{
       await page.waitForSelector(selector,{visible:true});await frames(page);
@@ -97,6 +98,8 @@ async function hostAudio(ctx) {
   try {
     await startGame(session,ctx.server);
     if(await page.$eval('#modal',n=>getComputedStyle(n).display!=='none'))await clickVisible(page,'#modal-buttons '+button('closeModal()'));
+    await clickVisible(page,'#viewport-dock-gear');
+    await page.waitForFunction(()=>document.getElementById('viewport-dock').classList.contains('open'));
     await clickVisible(page,'.dropdown-toggle[onclick*="system-dropdown"]');await clickVisible(page,button('showGameSettings()'));await clickVisible(page,'.gs-tab[data-tab="music"]');
     await snap('disabled');await clickVisible(page,'label:has(#gs-bgm-toggle)');
     await page.waitForFunction(()=>{const a=document.querySelector('#bgm-player');return bgmManager.getEnabled()&&!a.paused&&a.readyState>=2&&a.currentTime>0;},{timeout:15000});await snap('playing');
