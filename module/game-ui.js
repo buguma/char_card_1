@@ -314,19 +314,16 @@ function updateStatsDisplay() {
 // 更新关系显示
 function updateRelationshipsDisplay() {
     const grid = document.getElementById('relationship-grid');
+    hideTooltip();
     grid.innerHTML = '';
     
     Object.keys(npcs).forEach(npcId => {
         const npc = npcs[npcId];
         const favorability = npcFavorability[npcId];
         const isVisible = npcVisibility[npcId];
-        const hasGifted = npcGiftGiven[npcId];
         
         const card = document.createElement('div');
         card.className = 'relationship-card';
-        
-        // 判断是否可以送礼
-        const canGift = !hasGifted && favorability <= 40 && playerStats.金钱 >= 500;
         
         card.innerHTML = `
             <div class="relationship-portrait">
@@ -335,30 +332,43 @@ function updateRelationshipsDisplay() {
             <div class="relationship-info">
                 <div class="relationship-name">${npc.name}</div>
                 <div class="relationship-bar">
-                    <div class="relationship-fill" style="width: ${favorability}%"></div>
+                    <div class="relationship-fill" style="width: ${Math.max(0, Math.min(100, favorability))}%"></div>
                 </div>
-                <div class="relationship-value">好感度: ${favorability}</div>
+                <div class="relationship-value">好感度: <span class="relationship-value-number">${favorability}</span></div>
                 <div class="relationship-controls">
                     <label class="visibility-checkbox">
                         <input type="checkbox" id="visibility-${npcId}" ${isVisible ? 'checked' : ''} 
                                onchange="toggleNpcVisibility('${npcId}')">
                         <span class="checkbox-label">出场</span>
                     </label>
-                    <button class="gift-btn ${!canGift ? 'disabled' : ''}" 
-                            onclick="giveGift('${npcId}')" 
-                            ${!canGift ? 'disabled' : ''}>
-                        送礼
-                    </button>
                 </div>
             </div>
         `;
         
-        card.addEventListener('mouseenter', function(e) {
-            showTooltip(e, npc.description);
+        card.tabIndex = 0;
+        card.addEventListener('pointerenter', function(e) {
+            if (e.pointerType === 'mouse') showTooltip(e, npc.description);
         });
-        
-        card.addEventListener('mouseleave', function() {
-            hideTooltip();
+        card.addEventListener('pointerleave', function(e) {
+            if (e.pointerType === 'mouse' && !relationshipTooltipPinned &&
+                !document.getElementById('tooltip').contains(e.relatedTarget)) hideTooltip();
+        });
+        card.addEventListener('click', function(e) {
+            if (e.target.closest('input, label, button')) {
+                hideTooltip();
+                return;
+            }
+            if (relationshipTooltipAnchor === card && relationshipTooltipPinned) {
+                hideTooltip();
+            } else {
+                showTooltip(e, npc.description);
+                relationshipTooltipPinned = true;
+            }
+        });
+        card.addEventListener('keydown', function(e) {
+            if (e.target !== card || !['Enter', ' '].includes(e.key)) return;
+            e.preventDefault();
+            card.click();
         });
         
         grid.appendChild(card);
@@ -366,10 +376,76 @@ function updateRelationshipsDisplay() {
 }
 
 
+let relationshipTooltipAnchor = null;
+let relationshipTooltipPinned = false;
+let relationshipTooltipCleanup = null;
+
+// Relationship descriptions use viewport coordinates and an independently scrollable body.
+function showRelationshipTooltip(card, text) {
+    hideTooltip();
+    const tooltip = document.getElementById('tooltip');
+    const viewport = document.getElementById('main-viewport');
+    if (!tooltip || !viewport) return;
+    const bounds = viewport.getBoundingClientRect();
+    const left = Math.max(0, bounds.left) + 8;
+    const top = Math.max(0, bounds.top) + 8;
+    const right = Math.min(window.innerWidth, bounds.right) - 8;
+    const bottom = Math.min(window.innerHeight, bounds.bottom) - 8;
+    if (right <= left || bottom <= top) return;
+    tooltip.classList.add('relationship-tooltip', 'show');
+    tooltip.replaceChildren();
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'relationship-tooltip-close';
+    close.textContent = '\u00d7';
+    close.setAttribute('aria-label', '关闭介绍');
+    close.onclick = hideTooltip;
+    const content = document.createElement('div');
+    content.className = 'tooltip-item';
+    content.textContent = text || '';
+    tooltip.append(close, content);
+    tooltip.setAttribute('role', 'tooltip');
+    tooltip.style.cssText = `position:fixed;transform:none;left:${left}px;top:${top}px;width:${Math.min(340, right - left)}px;max-width:${right - left}px;max-height:${bottom - top}px;`;
+    const rect = card.getBoundingClientRect();
+    const tip = tooltip.getBoundingClientRect();
+    tooltip.style.left = Math.max(left, Math.min(right - tip.width, rect.left + (rect.width - tip.width) / 2)) + 'px';
+    const preferredTop = rect.top - tip.height - 8 >= top ? rect.top - tip.height - 8 : rect.bottom + 8;
+    tooltip.style.top = Math.max(top, Math.min(bottom - tip.height, preferredTop)) + 'px';
+    relationshipTooltipAnchor = card;
+    card.setAttribute('aria-describedby', 'tooltip');
+    const outside = e => {
+        if (!tooltip.contains(e.target) && !card.contains(e.target)) hideTooltip();
+    };
+    const scroll = e => {
+        if (!tooltip.contains(e.target)) hideTooltip();
+    };
+    const escape = e => { if (e.key === 'Escape') hideTooltip(); };
+    const observer = new MutationObserver(() => {
+        if (!card.isConnected || !card.closest('.scene.active')) hideTooltip();
+    });
+    observer.observe(document.getElementById('relationships-scene'), { attributes: true, attributeFilter: ['class', 'style'] });
+    document.addEventListener('click', outside);
+    document.addEventListener('scroll', scroll, true);
+    document.addEventListener('keydown', escape);
+    window.addEventListener('resize', hideTooltip);
+    relationshipTooltipCleanup = () => {
+        observer.disconnect();
+        document.removeEventListener('click', outside);
+        document.removeEventListener('scroll', scroll, true);
+        document.removeEventListener('keydown', escape);
+        window.removeEventListener('resize', hideTooltip);
+    };
+}
+
 // 显示悬停提示
 function showTooltip(event, text) {
     const tooltip = document.getElementById('tooltip');
     const card = event.currentTarget;
+    if (card.matches('.relationship-card')) {
+        showRelationshipTooltip(card, text);
+        return;
+    }
+    hideTooltip();
     const rect = card.getBoundingClientRect();
     const viewportRect = document.querySelector('.viewport').getBoundingClientRect();
     
@@ -401,7 +477,19 @@ function showTooltip(event, text) {
 
 function hideTooltip() {
     const tooltip = document.getElementById('tooltip');
+    if (relationshipTooltipCleanup) relationshipTooltipCleanup();
+    relationshipTooltipCleanup = null;
+    if (relationshipTooltipAnchor) relationshipTooltipAnchor.removeAttribute('aria-describedby');
+    relationshipTooltipAnchor = null;
+    relationshipTooltipPinned = false;
+    if (!tooltip) return;
     tooltip.classList.remove('show');
+    if (tooltip.classList.contains('relationship-tooltip')) {
+        tooltip.classList.remove('relationship-tooltip');
+        tooltip.removeAttribute('style');
+        tooltip.replaceChildren();
+        tooltip.removeAttribute('role');
+    }
 }
 
 // 显示"属性查看-角色属性"里 7 项属性（根骨/悟性/心性/魅力/武学/学识/声望）当前数值对应的分档文案

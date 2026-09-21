@@ -4,6 +4,9 @@ import { assert, absolute, safeRelative, uniquePaths, noSymlinks, exists, fileIn
 import { withRun, requireStep, isMain, runCli } from './run-record.mjs';
 
 export const WEB_DIRS = ['module', 'assets', 'img', 'bgm', 'music', 'worker', 'ui', 'tools'];
+// Root resources are reviewed explicitly: never copy arbitrary root files/secrets.
+// Unlike module/ui descendants these are not covered by the recursive WEB_DIRS.
+export const WEB_ROOT_FILES = ['secondary-pages-responsive.css'];
 export const HTML_MAPPING = [
   ['start-screen-noST.html', 'index.html'], ['index.html', 'game.html'],
   ...['start-screen-noST.html', 'start-screen.html', 'world_map.html', 'turn-based-battle.html', 'turn-based-battle-new.html', 'alchemy.html', 'blackjack.html', 'farm.html'].map(name => [name, name])
@@ -89,7 +92,7 @@ export async function prepareApk(record, { runDir }) {
   await noSymlinks(stage); assert(!await exists(stage) && !await exists(paths.isolatedRoot), 'APK copy already exists; never overwrite a previous copy');
   const release = await frozenRelease(record), files = Object.create(null);
   for (const dir of WEB_DIRS) await collectTree(record.projectRoot, dir, files, { exclude3d: true });
-  for (const source of new Set(HTML_MAPPING.map(([name]) => name))) await addRequired(record.projectRoot, source, files);
+  for (const source of new Set([...HTML_MAPPING.map(([name]) => name), ...WEB_ROOT_FILES])) await addRequired(record.projectRoot, source, files);
   for (const name of APK_ROOT_FILES) await addRequired(record.projectRoot, `apk/${name}`, files);
   for (const name of ANDROID_ROOT_FILES) await addRequired(record.projectRoot, `apk/android/${name}`, files);
   for (const name of ANDROID_APP_FILES) await addRequired(record.projectRoot, `apk/android/app/${name}`, files);
@@ -134,7 +137,7 @@ export async function buildApkWww(record, { runDir }, invokedApkRoot) {
   assert(!await exists(paths.wwwRoot), 'Isolated www already exists; refuse implicit cleanup or overwrite');
   const expected = Object.create(null), mappings = Object.create(null), rewritten = new Map();
   for (const [name, info] of Object.entries(input.files)) {
-    if (!WEB_DIRS.some(dir => name.startsWith(`${dir}/`))) continue;
+    if (!WEB_ROOT_FILES.includes(name) && !WEB_DIRS.some(dir => name.startsWith(`${dir}/`))) continue;
     expected[name] = info; mappings[name] = { source: name, transform: 'identity' };
   }
   for (const [source, destination] of HTML_MAPPING) {

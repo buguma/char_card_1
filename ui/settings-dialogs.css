@@ -1,0 +1,75 @@
+/* Settings/editor dialogs: bounded typography, viewport-safe panels, persistent actions.
+   Loaded by config-modal.js on both game and start pages. No business state changes. */
+:root { --settings-surface: #f5eedf; --settings-text: #352e25; --settings-line: #bcae94; }
+body.ui-style-flat { --settings-surface: var(--f-card, #172033); --settings-text: var(--f-text, #dfe6f3); --settings-line: var(--f-line, #3a4863); }
+body[data-responsive-page="start"] { --settings-surface: #20262b; --settings-text: #f5f1e7; --settings-line: #536069; }
+body :is(#api-config-modal, #prompt-editor-modal, #loc-label-editor-modal, #wb-editor-modal, #pm-confirm-modal) {
+    box-sizing: border-box; position: fixed !important; inset: 0 !important;
+    left: var(--game-dialog-left, 0px) !important; top: var(--game-dialog-top, 0px) !important;
+    width: var(--game-dialog-vw, 100%) !important; height: 100% !important; height: var(--game-dialog-vh, 100dvh) !important;
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)) !important;
+    background: rgba(15, 20, 25, .62); overflow: hidden;
+}
+body :is(#api-config-modal, #prompt-editor-modal, #loc-label-editor-modal, #wb-editor-modal) > .modal-content {
+    width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important;
+    padding: 0 !important; margin: 0 !important; border: 0 !important; border-image: none !important;
+    background: transparent !important; box-shadow: none !important; overflow: hidden !important;
+    display: flex !important; align-items: center !important; justify-content: center !important;
+}
+body :is(#api-config-modal, #prompt-editor-modal, #loc-label-editor-modal, #wb-editor-modal, #pm-confirm-modal) .cfg-panel {
+    box-sizing: border-box; width: min(100%, 800px) !important; max-width: 800px !important;
+    max-height: 100% !important; min-height: 0; padding: clamp(12px, 2vmin, 22px) !important;
+    color: var(--settings-text); background-color: var(--settings-surface) !important;
+    border-width: 10px !important; font-size: 15px; line-height: 1.5;
+    overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+}
+body.ui-style-flat :is(#api-config-modal, #prompt-editor-modal, #loc-label-editor-modal, #wb-editor-modal, #pm-confirm-modal) .cfg-panel,
+body[data-responsive-page="start"] #api-config-modal .cfg-panel { border-width: 1px !important; }
+body #api-config-modal .cfg-panel { display: flex; flex-direction: column; overflow: hidden; }
+.cfg-scroll-body { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 4px 4px 10px; }
+body :is(#api-config-modal, #prompt-editor-modal, #loc-label-editor-modal, #wb-editor-modal) .cfg-title {
+    flex: 0 0 auto; font-size: clamp(18px, 3vmin, 23px) !important; line-height: 1.35;
+    margin: 0 0 10px !important; padding: 0 0 8px !important; color: inherit;
+}
+body :is(#api-config-modal, #prompt-editor-modal, #loc-label-editor-modal, #wb-editor-modal) :is(.cfg-btn, .modal-btn) {
+    min-height: 40px !important; min-width: 0; font-size: 14px !important; line-height: 1.4 !important;
+    padding: 8px 14px !important; white-space: normal; height: auto; overflow-wrap: anywhere;
+}
+body :is(#api-config-modal, #prompt-editor-modal, #loc-label-editor-modal, #wb-editor-modal) .cfg-input {
+    box-sizing: border-box; min-width: 0; max-width: 100%; font-size: 16px !important;
+    line-height: 1.4; padding: 8px 10px; color: inherit;
+}
+body #api-config-modal .cfg-field { margin-bottom: 12px; }
+body #api-config-modal .cfg-row { gap: 8px; }
+body #api-config-modal .cfg-row > * { min-width: 0; }
+body #api-config-modal .cfg-label { font-size: 14px !important; overflow-wrap: anywhere; }
+body #api-config-modal :is(.cfg-hint, .cfg-notice, .cfg-status) { font-size: 13px !important; line-height: 1.6; opacity: 1; }
+body #api-config-modal .cfg-footer {
+    flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 10px;
+    padding: 10px 0 0; margin: 0; border-top: 1px solid var(--settings-line);
+}
+body :is(#prompt-editor-modal, #loc-label-editor-modal, #wb-editor-modal) .modal-buttons {
+    position: sticky; bottom: -1px; z-index: 1; padding: 10px 0 2px !important;
+    background: var(--settings-surface); display: flex; flex-wrap: wrap; gap: 8px;
+}
+body :is(#prompt-editor-textarea, #loc-label-editor-value, #wb-content-textarea) {
+    min-height: 100px !important; height: clamp(100px, 36dvh, 420px) !important;
+}
+body #loc-editor-body { max-height: none !important; overflow: visible !important; }
+body.ui-style-flat #api-config-modal .cfg-scroll-body span[style*="color:rgba(55"],
+body[data-responsive-page="start"] #api-config-modal .cfg-scroll-body span[style*="color:rgba(55"] { color: var(--settings-text) !important; }
+@media (max-height: 500px) and (min-width: 600px) {
+    body #api-config-modal .cfg-panel { width: min(100%, 960px) !important; max-width: 960px !important; }
+    .cfg-scroll-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; align-items: start; }
+    .cfg-scroll-body > :is(.cfg-hint, .cfg-notice, hr, .cfg-section-title, #api-preset-container) { grid-column: 1 / -1; }
+    .cfg-scroll-body > hr { width: 100%; }
+    body #api-config-modal .cfg-field { margin-bottom: 8px; }
+    body #api-config-modal .cfg-title { margin-bottom: 4px !important; padding-bottom: 4px !important; }
+}
+@media (max-width: 380px) {
+    body #api-config-modal .cfg-row { flex-wrap: wrap; }
+    body #api-config-modal .cfg-row > div { flex-basis: 100% !important; }
+}
+@media (pointer: coarse) {
+    body :is(#api-config-modal, #prompt-editor-modal, #loc-label-editor-modal, #wb-editor-modal) :is(.cfg-btn, .modal-btn) { min-height: 44px !important; }
+}

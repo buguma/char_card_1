@@ -82,7 +82,7 @@ export async function startTestServer({ gameRoot, basePath='/' }) {
       const staticPath=basePath==='/'?decoded:'/'+decoded.slice(basePath.length);
       const relative = staticPath === '/' ? 'index.html' : staticPath.replace(/^\//,'');
       const segments = relative.split('/');
-      if (segments.some(x => x.startsWith('.')) || (segments.length === 1 ? path.extname(relative) !== '.html' && relative !== 'favicon.ico' : !STATIC_DIRS.has(segments[0]))) { res.writeHead(403).end(); return; }
+      if (segments.some(x => x.startsWith('.')) || (segments.length === 1 ? path.extname(relative) !== '.html' && relative !== 'favicon.ico' && relative !== 'secondary-pages-responsive.css' : !STATIC_DIRS.has(segments[0]))) { res.writeHead(403).end(); return; }
       const target = path.resolve(root, relative);
       if (!isWithin(root,target)) { res.writeHead(403).end(); return; }
       const rule=assetRules.get(relative);

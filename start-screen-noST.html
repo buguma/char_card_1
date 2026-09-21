@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>瀚海归义录</title>
     <link rel="stylesheet" href="module/minigame-fonts.css">
     <style>
@@ -467,8 +467,9 @@
         .origin-desc-count { text-align: right; font-size: clamp(11px, 1.2vw, 14px); opacity: 0.5; margin-top: 3px; }
     </style>
     <!-- 后续交互逻辑可在此处添加脚本 -->
+    <link rel="stylesheet" href="secondary-pages-responsive.css">
 </head>
-<body>
+<body data-responsive-page="start">
     <div class="backdrop"></div>
     <audio id="bgm" src="bgm/主界面.mp3" autoplay loop preload="auto" crossorigin="anonymous" playsinline></audio>
     <div class="viewport-box">

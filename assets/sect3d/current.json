@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "buildId": "integration-015",
+  "buildId": "mobile-fix-v2-20260921-120456-2ac21e",
   "bridgeProtocol": {
     "min": 1,
     "max": 1
   },
-  "manifest": "integration-015/manifest.json",
-  "manifestSha256": "a3bbbe6749434176fed4e9566192f4d954f660ee2984c0fa7477d4ce6d2f47d6"
+  "manifest": "mobile-fix-v2-20260921-120456-2ac21e/manifest.json",
+  "manifestSha256": "420129a53a201aa6251b9bd82fb2c3bb5db5e0f6d728450aeb7aede9c50432c6"
 }

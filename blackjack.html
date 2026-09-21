@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>21点游戏</title>
     <style>
         /* 基础样式和响应式改进 */
@@ -364,12 +364,13 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="secondary-pages-responsive.css">
 </head>
 
-<body>
+<body data-responsive-page="blackjack">
     <div class="container">
         <div class="game-area">
-            <button class="exit-btn" onclick="exitGame()">×</button>
+            <button class="exit-btn" onclick="exitGame()" aria-label="退出21点">×</button>
             <div class="money-info">
                 <div class="money-display">
                     总金额: <span id="total-money">10000</span>

@@ -112,7 +112,8 @@ try {
       assert.equal(closed.menuVisibility, 'hidden', '收起时四枚按钮不可见');
       assert.ok(Math.abs(closed.gearRightGap - 12) < 1.5, `齿轮右间距 ${closed.gearRightGap} 应≈12px`);
       assert.ok(Math.abs(closed.gearBottomGap - 12) < 1.5, `齿轮下间距 ${closed.gearBottomGap} 应≈12px`);
-      assert.ok(closed.gearWidth >= 19 && closed.gearWidth <= 25, `齿轮尺寸 ${closed.gearWidth} 与镜头归位按钮同档`);
+      const mobileGear = viewport.width <= 600;
+       assert.ok(mobileGear ? (closed.gearWidth >= 32 && closed.gearWidth <= 40) : (closed.gearWidth >= 19 && closed.gearWidth <= 25), `齿轮尺寸 ${closed.gearWidth} 不符合${mobileGear ? '手机放大' : '桌面'}规格`);
       assert.equal(closed.gearRadius, '50%');
       assert.ok(Number(closed.layerZIndex) >= 950, '层级必须高于 CG/SLG 图层与流式遮罩');
       await page.screenshot({ path: path.join(directory, `${label}-closed.png`) });

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>西域世界地图</title>
     <style>
         * {
@@ -665,8 +665,9 @@
             cursor: not-allowed;
         }
     </style>
+    <link rel="stylesheet" href="secondary-pages-responsive.css">
 </head>
-<body>
+<body data-responsive-page="worldmap">
     <div class="map-container">
         <div class="map-background" id="mapBackground"></div>
         <!-- 关闭按钮 -->
@@ -678,7 +679,7 @@
         <div class="modal-content">
             <div class="modal-bg" id="modalBg"></div>
             <div class="modal-overlay"></div>
-            <button class="close-btn" onclick="closeModal()">×</button>
+            <button class="close-btn" onclick="closeModal()" aria-label="关闭地点详情">×</button>
             <div class="modal-inner">
                 <div class="modal-body" id="modalBody"></div>
                 <div class="modal-footer" id="modalFooter">

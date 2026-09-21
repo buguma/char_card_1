@@ -1,0 +1,283 @@
+/* Last-loaded, main-game dialog presentation layer.
+ * .game-dialog is an explicit JS allowlist, not every .modal (editors own theirs).
+ * !important overrides legacy fitModalToViewport inline geometry and theme vw rules.
+ * No descendant-wide font reset: titles / controls / prose / metadata stay distinct.
+ */
+:root {
+    --game-dialog-vh: 100vh;
+    --game-dialog-vw: 100vw;
+    --game-dialog-gap: 12px;
+    --game-dialog-font: 15px;
+    --game-dialog-title: 20px;
+}
+@supports (height: 100dvh) { :root { --game-dialog-vh: 100dvh; } }
+/* Cutout clearance belongs to controls, never to the map/camera viewport.
+   Zero insets preserve desktop geometry; split-landscape's right edge is
+   internal (next to story text), so only the outer left edge is inset there. */
+body #main-viewport .status-display {
+    top: 0 !important;
+    box-sizing: border-box;
+    height: clamp(24px, 7.3%, 56px);
+    padding-top: 0 !important;
+    padding-left: max(12px, env(safe-area-inset-left, 0px)) !important;
+    padding-right: max(12px, env(safe-area-inset-right, 0px)) !important;
+}
+body #main-viewport .viewport-dock {
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+}
+body.layout-landscape #main-viewport .status-display { padding-right: 12px !important; }
+body.layout-landscape #main-viewport .viewport-dock { right: 12px; }
+
+body .game-dialog,
+body .game-frame-dialog {
+    position: fixed !important;
+    inset: auto !important;
+    left: var(--game-dialog-left, 0px) !important;
+    top: var(--game-dialog-top, 0px) !important;
+    width: var(--game-dialog-vw) !important;
+    height: var(--game-dialog-vh) !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    transform: none !important;
+    box-sizing: border-box !important;
+    padding: max(var(--game-dialog-gap), env(safe-area-inset-top, 0px)) max(var(--game-dialog-gap), env(safe-area-inset-right, 0px)) max(var(--game-dialog-gap), env(safe-area-inset-bottom, 0px)) max(var(--game-dialog-gap), env(safe-area-inset-left, 0px)) !important;
+    overflow: hidden !important;
+    background-color: rgba(15, 18, 23, .68);
+    overscroll-behavior: contain;
+}
+/* Do not override display: business code uses none/block to open and close. */
+body .modal.game-dialog > .modal-content {
+    position: relative !important;
+    inset: auto !important;
+    top: 50% !important;
+    left: auto !important;
+    transform: translateY(-50%) !important;
+    width: 100% !important;
+    max-width: 960px !important;
+    height: auto !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    min-width: 0 !important;
+    margin: 0 auto !important;
+    padding: 14px !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    overflow: hidden !important;
+    font-size: var(--game-dialog-font);
+    line-height: 1.55;
+    text-align: left;
+    animation: none !important; /* old transform animation overwrites centering */
+}
+body :is(#modal, #item-detail-modal, #shop-detail-modal, #difficulty-modal, #music-modal, #font-modal).game-dialog > .modal-content { max-width: 600px !important; }
+body :is(#save-list-modal, #load-modal, #last-input-modal).game-dialog > .modal-content { max-width: 760px !important; }
+body :is(#pipeline-log-modal, #history-summary-modal, #skill-library-modal, #skill-equipment-modal, #game-settings-modal, #trading-modal, #cheat-modal).game-dialog > .modal-content { height: 100% !important; }
+body .game-dialog .game-dialog-header,
+body .game-dialog .game-dialog-footer { flex: 0 0 auto !important; min-width: 0; }
+body .game-dialog .game-dialog-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+    overflow-wrap: anywhere;
+    padding: 2px;
+}
+body .game-dialog .game-dialog-body > :first-child { margin-top: 0 !important; }
+body .game-dialog .game-dialog-body > :last-child { margin-bottom: 0 !important; }
+body .game-dialog :is(h2, h3),
+body .game-dialog [data-dialog-fluid-font="title"] {
+    font-size: var(--game-dialog-title) !important;
+    line-height: 1.35 !important;
+    margin: 0 0 8px !important;
+    padding: 6px 10px !important;
+    letter-spacing: .04em !important;
+}
+body .game-dialog :is(h4, .skill-title, .skill-panel-title) { font-size: 16px !important; line-height: 1.45; }
+body .game-dialog :is(.modal-text, .item-description, .shop-item-description, .trading-item-name, .trading-item-price, .trading-money, .equipped-item, .option-content strong, .gs-switch-label, .gs-slider-label, .cheat-item label),
+body .game-dialog [data-dialog-fluid-font="body"] { font-size: var(--game-dialog-font) !important; line-height: 1.6 !important; }
+body .game-dialog :is(.item-stat, .shop-item-stat, .price-label, .slot-label, .empty-slot, .stat-effect) { font-size: 14px !important; line-height: 1.5; }
+body .game-dialog .price-value { font-size: 17px !important; }
+body .game-dialog :is(small, .difficulty-option small, .item-quantity, .skill-modal-subtitle, .skill-level-meta, .gs-toggle-hint, .gs-hint, .trading-item-detail) { font-size: 13px !important; line-height: 1.5 !important; }
+body .game-dialog :is(button, .modal-btn, .skill-action-btn, .skill-filter-btn, .gs-tab, .pl-tab) {
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    min-height: 40px;
+    max-width: 100%;
+    padding: 8px 14px !important;
+    letter-spacing: .02em !important;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    touch-action: manipulation;
+}
+body .game-dialog :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
+    font-size: 16px !important;
+    line-height: 1.5 !important;
+    min-height: 40px;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+body .game-dialog textarea { width: 100%; resize: vertical; }
+body .game-dialog :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--accent-cyan, #278bba); outline-offset: 2px; }
+body .game-dialog .modal-buttons {
+    gap: 8px !important;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    margin: 0 !important;
+    padding: 8px 0 0 !important;
+}
+body .game-dialog .game-dialog-footer { border-top: 1px solid rgba(130, 130, 130, .3); }
+body .game-dialog .modal-text { margin: 0; padding: 8px 2px; font-weight: 400 !important; }
+/* Reuse ink/paper assets, but spend only 8px of each edge on decoration. */
+body.ui-style-ancient .game-dialog > .modal-content {
+    border-width: 8px !important;
+    border-image: url('../assets/image/static/水墨粗方框.png') 24% / 10px / 1px stretch !important;
+    padding: 12px !important;
+}
+body.ui-style-ancient .game-dialog :is(.modal-btn, .trading-btn, .skill-action-btn, .skill-filter-btn) {
+    border: 2px solid transparent !important;
+    border-image: url('../assets/image/static/边框-fill.png') 4% fill / 6px / 1px stretch !important;
+    background-image: none !important;
+    min-width: 64px;
+    color: var(--ink-black, #25251f) !important;
+}
+/* ID-scoped legacy save skin used 16px borders and 12px mobile type. */
+body.ui-style-ancient :is(#load-modal, #save-list-modal).game-dialog .modal-btn { border: 6px solid transparent !important; border-image: url('../assets/image/static/框5-fill.png') 52 fill / 8px / 1px stretch !important; padding: 6px 10px !important; font-size: 14px !important; }
+body.ui-style-ancient .game-dialog .skill-filter-btn.active { color: var(--accent-red, #8d2925) !important; text-decoration: underline; text-underline-offset: 4px; }
+body.ui-style-ancient .game-dialog :is(.inventory-item, .equipment-slot, .skill-card, .trading-item-row, .cheat-section) { border-width: 2px !important; border-image-width: 6px !important; }
+body.ui-style-flat .game-dialog > .modal-content { border-radius: 12px !important; border: 1px solid var(--f-border, #465267) !important; }
+body.ui-style-flat .game-dialog :is(h2, h3, h4, .skill-panel-title) { color: var(--f-text, #e8ecf5) !important; }
+body.ui-style-flat .game-dialog :is(.trading-list, .skill-panel, .skill-empty-state) { background: var(--f-card-2, #202940) !important; border-color: var(--f-line, #354059) !important; }
+body.ui-style-flat .game-dialog .trading-empty { color: var(--f-text-2, #b8c2d6) !important; }
+body .game-dialog :is(.skill-desc, .skill-level-effect, .skill-effect-row) { font-size: 14px !important; line-height: 1.6; }
+body .game-dialog :is(.skill-meta-row, .skill-level-meta, .skill-select-label) { font-size: 13px !important; }
+/* Inventory and equipment: readable names rather than tiny icon-only cells. */
+body .game-dialog .inventory-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); max-height: none; overflow: visible; gap: 10px; padding: 4px; }
+body .game-dialog .inventory-grid > :not(.inventory-item) { grid-column: 1 / -1; }
+body .game-dialog .inventory-item { min-width: 0; padding: 10px !important; }
+body .game-dialog .item-name { font-size: 14px !important; line-height: 1.5; }
+body .game-dialog .item-icon { width: 36px; height: 36px; font-size: 22px !important; }
+body .game-dialog .equipment-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 8px 0; }
+body .game-dialog .equipment-slot { padding: 10px !important; }
+body .game-dialog .slot-item { min-height: 44px; }
+body .game-dialog :is(.equipment-stats, .item-info, .shop-item-info, .shop-item-price-info) { margin: 8px 0; padding: 10px !important; }
+/* One middle scroll owner prevents nested lists from trapping mobile gestures. */
+body .game-dialog :is(.skill-list-container, .trading-list, .bounty-modal-body, #history-summary-content, #pipeline-log-content) { max-height: none !important; height: auto !important; overflow: visible !important; min-height: 0; }
+body .game-dialog :is(#history-summary-content, #pipeline-log-content) { padding: 12px !important; margin: 0 !important; font-size: 14px !important; line-height: 1.65 !important; white-space: pre-wrap; overflow-wrap: anywhere; }
+body .game-dialog :is(#history-summary-content, #pipeline-log-content) pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+body .game-dialog .bounty-modal-body { padding: 8px !important; }
+body .game-dialog .skill-modal-header { gap: 12px; align-items: center; }
+body .game-dialog .skill-memory-summary { font-size: 14px; min-width: 0; }
+body .game-dialog .skill-filter-row { margin-bottom: 10px; gap: 6px; }
+body .game-dialog .skill-equipment-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; gap: 12px; }
+body .game-dialog .skill-card { padding: 12px !important; min-width: 0; }
+body .game-dialog .skill-memory-bar { margin: 4px 0 12px; }
+body .game-dialog .trading-container { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); height: auto !important; gap: 14px; min-height: 0; }
+body .game-dialog .trading-section { width: auto !important; min-width: 0; min-height: 0; }
+body .game-dialog .trading-divider { display: none; }
+body .game-dialog .trading-section h4 { font-size: 16px !important; margin: 0 0 10px; }
+body .game-dialog .trading-list { padding: 4px; }
+body .game-dialog .trading-item-row { flex-wrap: wrap; gap: 8px; padding: 10px !important; }
+body .game-dialog .trading-item-info { min-width: 0; flex: 1 1 140px; }
+body .game-dialog .trading-item-name { white-space: normal; }
+body .game-dialog .pl-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 !important; }
+body .game-dialog .pl-tab { flex: 1 1 auto; }
+/* Settings retains its original tabs/panels and all change handlers. */
+body .game-dialog .gs-layout { display: grid; grid-template-columns: 150px minmax(0, 1fr); min-height: 0; overflow: visible; gap: 12px; }
+body .game-dialog .gs-tabs { width: auto !important; min-width: 0 !important; padding: 0 !important; gap: 6px; }
+body .game-dialog .gs-panel-wrap { min-width: 0; overflow: visible; padding: 0 6px !important; }
+body .game-dialog .gs-panel { padding: 4px !important; }
+body .game-dialog .gs-switch-row { flex-wrap: wrap; gap: 8px; padding: 10px 0; }
+body .game-dialog .cheat-content { max-width: 960px !important; }
+body .game-dialog .cheat-section { margin: 0 0 12px; padding: 12px !important; }
+body .game-dialog .cheat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+body .game-dialog .cheat-item { min-width: 0; }
+body .game-dialog .difficulty-option { padding: 10px !important; margin: 8px 0; gap: 10px; }
+body .game-dialog .game-dialog-file-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding-top: 12px; }
+body .game-dialog .game-dialog-file-actions label { grid-column: 1 / -1; }
+body #load-modal.game-dialog .game-dialog-footer { flex-direction: row !important; }
+body #load-modal.game-dialog .game-dialog-footer button { width: auto !important; }
+body :is(#load-modal, #save-list-modal).game-dialog .game-dialog-body > div[style*="overflow"] { max-height: none !important; overflow: visible !important; }
+body :is(#load-modal, #save-list-modal).game-dialog .game-dialog-body div[style*="justify-content:space-between"] { gap: 10px; flex-wrap: wrap; }
+body :is(#load-modal, #save-list-modal).game-dialog .game-dialog-body div[style*="justify-content:space-between"] > div { min-width: 0; }
+/* Iframe games retain their documents, but no longer inherit the half-width 3D map. */
+body .game-frame-dialog > :is(.worldmap-container, .blackjack-container, .battle-container, .farm-container) { position: relative !important; inset: auto !important; transform: none !important; margin: 0 !important; width: 100% !important; max-width: none !important; height: 100% !important; max-height: none !important; }
+body .game-frame-dialog iframe { display: block; width: 100% !important; height: 100% !important; border: 0; }
+/* Shared 2D/3D scene popovers: bounded type, compact assets, scrollable text. */
+body :is(.npc-info-popup, .location-info-popup) { box-sizing: border-box; width: 300px; min-width: 0 !important; max-width: calc(100vw - 24px) !important; max-height: calc(var(--game-dialog-vh) - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important; overflow-y: auto; overscroll-behavior: contain; padding: 12px !important; font-size: 14px !important; }
+body :is(.npc-info-name, .location-info-name) { font-size: 18px !important; line-height: 1.4; }
+body :is(.npc-info-desc, .location-info-npcs, .location-info-npc-item) { font-size: 14px !important; line-height: 1.5; }
+body :is(.npc-info-btn, .location-go-btn) { font-size: 14px !important; min-height: 40px; padding: 8px 14px !important; white-space: normal; }
+body.ui-style-ancient :is(.npc-info-popup, .location-info-popup) { border-width: 6px !important; border-image-width: 8px !important; }
+/* 2D ink-ring labels used to grow as 4.5vw on a wide monitor. The 3D ring
+   already has scene-measured bounds in scene3d-host.css; keep those coordinates. */
+body .npc-selection-overlay:not(.scene3d-npc-selection) .npc-selection-name { font-size: clamp(20px, 3vmin, 30px) !important; top: -14px; letter-spacing: 2px; }
+body .npc-selection-overlay:not(.scene3d-npc-selection) .npc-selection-desc { font-size: 14px !important; padding: 8px 12px; max-height: 112px; overflow-y: auto; pointer-events: auto; }
+body .npc-selection-overlay:not(.scene3d-npc-selection) .npc-selection-option { font-size: 16px !important; padding: 8px 12px; min-height: 36px; }
+body .npc-selection-overlay .npc-selection-option-reward { font-size: 12px !important; }
+/* Relationships are a scene, not a modal. Do not alter pagination or hidden NPCs. */
+body #relationships-scene .relationships-container { top: 52px; width: 96%; max-height: calc(100% - 60px); padding: 8px; box-sizing: border-box; }
+body #relationships-scene .back-btn { font-size: 14px !important; min-height: 36px; padding: 6px 12px !important; }
+body #relationships-scene .relationship-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+body #relationships-scene .relationship-card { min-width: 0; padding: 10px !important; }
+body #relationships-scene .relationship-name { font-size: 16px !important; }
+body #relationships-scene :is(.relationship-value, .relationship-controls, .relationship-controls button) { font-size: 14px !important; }
+body #relationships-scene .relationship-controls button { min-height: 36px; padding: 6px 10px !important; }
+@media (orientation: portrait), (max-width: 600px) {
+    /* The dense panels keep a compact two-column rail on phones. Each row
+       opens its full description in the existing detail dialog. */
+    body .game-dialog .trading-container,
+    body .game-dialog .skill-equipment-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    body .game-dialog .equipment-slots,
+    body .game-dialog .cheat-grid,
+    body .game-dialog .game-dialog-file-actions { grid-template-columns: minmax(0, 1fr); }
+    body .game-dialog .gs-layout { grid-template-columns: minmax(0, 1fr); }
+    body .game-dialog .gs-tabs { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; border-right: 0 !important; }
+    body .game-dialog .gs-tab { flex: 1 1 100px; }
+    body .game-dialog .skill-modal-header { flex-wrap: wrap; gap: 4px; }
+    body .game-dialog .skill-memory-summary { text-align: left; }
+    body #relationships-scene .relationship-grid { grid-template-columns: minmax(0, 1fr); }
+}
+/* Four compact equipment slots remain two columns on normal phones; effects
+   follow as a separate full-width block, not another tiny grid cell. */
+@media (min-width: 360px) {
+    body .game-dialog .equipment-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+    :root { --game-dialog-gap: 6px; }
+    body .modal.game-dialog > .modal-content { padding: 10px !important; gap: 8px !important; }
+    body.ui-style-ancient .game-dialog > .modal-content { padding: 8px !important; border-width: 6px !important; }
+    body .game-dialog .inventory-grid { grid-template-columns: minmax(0, 1fr); }
+    body .game-dialog .inventory-item { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 8px; text-align: left; }
+    body .game-dialog .item-icon { margin: 0; }
+}
+@media (orientation: landscape) and (max-height: 600px) {
+    :root { --game-dialog-gap: 6px; --game-dialog-title: 18px; --game-dialog-font: 14px; }
+    body .modal.game-dialog > .modal-content { padding: 8px !important; gap: 6px !important; }
+    body.ui-style-ancient .game-dialog > .modal-content { border-width: 6px !important; padding: 8px !important; }
+    body .game-dialog :is(h2, h3) { padding: 3px 8px !important; margin-bottom: 4px !important; }
+    body .game-dialog :is(button, .modal-btn, .gs-tab, .pl-tab) { min-height: 36px; padding: 6px 12px !important; }
+    body .game-dialog .game-dialog-footer { padding-top: 6px !important; }
+    body .game-dialog .inventory-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+    body .game-dialog .skill-modal-subtitle { font-size: 12px !important; }
+    body .game-dialog .gs-layout { grid-template-columns: 130px minmax(0, 1fr); }
+    body .game-dialog .gs-tabs { flex-direction: column; flex-wrap: nowrap; }
+    body .game-dialog .gs-tab { flex: 0 0 auto; }
+    body .game-dialog .pl-tab { font-size: 13px !important; }
+    body :is(.npc-info-popup, .location-info-popup) { width: 320px; padding: 8px !important; }
+}
+/* Touch targets stay usable in portrait and short landscape viewports. Keep this
+   as a hit-area rule so coarse pointer support does not depend on larger text. */
+@media (pointer: coarse) {
+    body .game-dialog :is(button, .modal-btn, .gs-tab, .pl-tab),
+    body :is(.npc-info-btn, .location-go-btn) { min-height: 44px; }
+}

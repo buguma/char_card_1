@@ -102,6 +102,24 @@ test('static asset faults and gates are exact, real HTTP, and require authentica
   assert.equal((await fetch(`${server.origin}/assets/controlled-test.glb`)).status,503);
  }finally{await server.close();}
 });
+test('root stylesheet whitelist serves only the exact secondary-page resource over HTTP',async()=>{
+ const expected=await readFile(path.join(workspace,'secondary-pages-responsive.css'),'utf8');
+ for(const basePath of ['/','/secondary-test/']) {
+  const server=await startTestServer({gameRoot:workspace,basePath});
+  try {
+   const url=server.baseUrl+'secondary-pages-responsive.css';
+   const response=await fetch(url);
+   assert.equal(response.status,200);
+   assert.match(response.headers.get('content-type'),/^text\/css\b/);
+   assert.equal(await response.text(),expected);
+   assert.equal((await fetch(url,{method:'HEAD'})).status,200);
+   assert.equal((await fetch(url,{method:'POST'})).status,405);
+   for(const filename of ['unknown.css','secondary-pages-responsive.css.bak','secondary-pages-responsive.js','.secondary-pages-responsive.css']) {
+    assert.equal((await fetch(server.baseUrl+filename)).status,403,filename);
+   }
+  } finally {await server.close();}
+ }
+});
 test('loopback static server denies traversal/private source and writes real gated SSE',async()=>{
  const server=await startTestServer({gameRoot:workspace});
  try {

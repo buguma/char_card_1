@@ -6,6 +6,12 @@
     "androidScheme": "https",
     "hostname": "localhost"
   },
+  "plugins": {
+    "SystemBars": {
+      "hidden": true,
+      "insetsHandling": "disable"
+    }
+  },
   "android": {
     "allowMixedContent": true,
     "webContentsDebuggingEnabled": true

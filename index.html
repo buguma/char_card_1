@@ -59,7 +59,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>瀚海归义录</title>
     <script>
         // 安卓 WebView 环境标识（Capacitor APK 中运行时注入）
@@ -85,6 +85,7 @@
     <link rel="stylesheet" href="module/scene3d-host.css">
     <!-- 布局迭代层：视窗右下角控制面板、文本区输入栏、横屏（左右分栏）布局 -->
     <link rel="stylesheet" href="module/game-styles-layout.css">
+    <link rel="stylesheet" href="module/mobile-density-overrides.css">
     <!-- 字体文件较大且 file:// 协议下会被浏览器 CORS 拦截，故仅在线/WebView 环境加载（双击打开时回退本地楷体） -->
     <script>
         if (location.protocol !== 'file:') {
@@ -94,6 +95,10 @@
             document.head.appendChild(beFontLink);
         }
     </script>
+    <!-- 主游戏弹窗最终表现层：独立于场景比例，保留古风/扁平素材与业务节点 -->
+    <link rel="stylesheet" href="module/game-styles-dialogs.css?v=responsive-dialogs-1">
+    <link rel="stylesheet" href="module/relationship-feedback.css">
+    <script src="module/game-dialogs.js?v=responsive-dialogs-1" defer></script>
 </head>
 <body>
     <div class="container">

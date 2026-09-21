@@ -5,15 +5,24 @@
  * 依赖：api-service.js
  */
 
+// Shared presentation layer for configuration and nested prompt editors (also on the start screen).
+(function () {
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = new URL('settings-dialogs.css', document.currentScript.src).href;
+    document.head.appendChild(link);
+})();
+
 function showConfigModal() {
     var existing = document.getElementById('api-config-modal');
-    if (existing) existing.remove();
+    if (existing) closeConfigModal();
 
     var config = apiService.getConfig();
     // 内容区 HTML（与外层结构无关）
     var _emb = (typeof embeddingService !== 'undefined') ? embeddingService : null;
     var innerHtml =
-        '<h3 class="cfg-title">API 配置</h3>' +
+        '<h3 class="cfg-title" id="api-config-title">API 配置</h3>' +
+        '<div class="cfg-scroll-body">' +
         '<p class="cfg-hint">请输入您的 API 信息。支持 OpenAI 兼容格式与 Gemini API。密钥仅保存在浏览器本地。</p>' +
 
         // API 类型
@@ -137,7 +146,7 @@ function showConfigModal() {
         '<div class="cfg-notice">⚠️ API Key 仅保存在浏览器本地，不会上传到任何服务器。请使用支持 CORS 的中转站或部署代理服务。</div>' +
 
         // 底部按钮
-        '<div class="cfg-footer">' +
+        '</div><div class="cfg-footer">' +
         '<button class="cfg-btn cfg-btn-subtle" onclick="closeConfigModal()">取消</button>' +
         '<button class="cfg-btn cfg-btn-green" onclick="saveConfigAndClose()">保存</button></div>';
 
@@ -159,9 +168,13 @@ function showConfigModal() {
     document.body.insertAdjacentHTML('beforeend', html);
 
     var modal = document.getElementById('api-config-modal');
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'api-config-title');
     if (typeof fitModalToViewport === 'function') {
         modal.style.display = 'block';
         requestAnimationFrame(function() {
+            if (!modal.isConnected) return;
             fitModalToViewport(modal);
             if (typeof bindModalAutoFit === 'function') bindModalAutoFit(modal);
         });
@@ -172,7 +185,10 @@ function showConfigModal() {
 
 function closeConfigModal() {
     var modal = document.getElementById('api-config-modal');
-    if (modal) modal.remove();
+    if (modal) {
+        if (modal._unbindFit) modal._unbindFit();
+        modal.remove();
+    }
 }
 
 function saveConfigAndClose() {

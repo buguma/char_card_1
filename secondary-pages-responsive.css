@@ -1,0 +1,240 @@
+/* Only the six explicitly opted-in secondary pages. Keep each page's artwork,
+   colors and modal display/visibility state; no generic .modal overrides. */
+body[data-responsive-page] {
+    --page-safe-top: max(8px, env(safe-area-inset-top, 0px));
+    --page-safe-right: max(8px, env(safe-area-inset-right, 0px));
+    --page-safe-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    --page-safe-left: max(8px, env(safe-area-inset-left, 0px));
+    --dialog-height: calc(100vh - var(--page-safe-top) - var(--page-safe-bottom));
+}
+@supports (height: 100dvh) {
+    body[data-responsive-page] { --dialog-height: calc(100dvh - var(--page-safe-top) - var(--page-safe-bottom)); }
+}
+/* Shared mechanics, restricted to inspected overlays (not map's decorative overlay). */
+body[data-responsive-page="farm"] :is(#exitOverlay, #uiOverlay, #eventOverlay),
+body[data-responsive-page="alchemy"] :is(.exit-overlay, .modal-overlay),
+body[data-responsive-page="battle"] :is(#confirm-modal, #exit-battle-overlay, #game-over-modal, #stats-modal) {
+    padding: var(--page-safe-top) var(--page-safe-right) var(--page-safe-bottom) var(--page-safe-left);
+    box-sizing: border-box;
+}
+body[data-responsive-page="farm"] :is(.exit-dialog, .event-popup),
+body[data-responsive-page="alchemy"] :is(.exit-dialog, .event-modal) {
+    max-width: 100%;
+    max-height: var(--dialog-height);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+body[data-responsive-page="farm"] :is(#exitOverlay, #uiOverlay, #eventOverlay, #shopOverlay, #popup) button,
+body[data-responsive-page="alchemy"] :is(.exit-overlay, .modal-overlay) button,
+body[data-responsive-page="battle"] :is(#confirm-modal, #exit-battle-overlay, #game-over-modal, #stats-modal, #item-modal) button,
+body[data-responsive-page="worldmap"] #locationModal button,
+body[data-responsive-page="start"] #new-journey-modal button {
+    min-height: 40px;
+    touch-action: manipulation;
+}
+body[data-responsive-page] button:focus-visible,
+body[data-responsive-page] input:focus-visible,
+body[data-responsive-page] textarea:focus-visible {
+    outline: 2px solid #d7a947;
+    outline-offset: 2px;
+}
+
+/* Start screen: existing full-frame sheet, fixed chrome and a start-aligned
+   scrolling body. Grid centering previously hid the top of tall creation forms. */
+body[data-responsive-page="start"] #new-journey-modal {
+    z-index: 3;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+body[data-responsive-page="start"] #new-journey-modal .modal-header {
+    flex: 0 0 auto;
+    font-size: clamp(18px, 3vmin, 28px);
+    padding: 8px 12px;
+}
+body[data-responsive-page="start"] #new-journey-modal .modal-body {
+    min-height: 0;
+    min-width: 0;
+    place-items: start center;
+    align-content: start;
+    padding: clamp(10px, 2vmin, 20px);
+    overscroll-behavior: contain;
+    overflow-wrap: anywhere;
+}
+body[data-responsive-page="start"] #new-journey-modal .modal-body > * { min-width: 0; max-width: 100%; }
+body[data-responsive-page="start"] #new-journey-modal .modal-footer {
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    gap: 6px;
+}
+body[data-responsive-page="start"] #new-journey-modal .modal-footer > div { display: flex; gap: 6px; flex-wrap: wrap; }
+body[data-responsive-page="start"] #new-journey-modal .btn { font-size: 15px; padding: 8px 12px; }
+body[data-responsive-page="start"] #new-journey-modal :is(.grid-select, .diff-list, .alloc-wrap, .custom-origin-wrap, .name-wrap) { width: min(100%, 880px); gap: 12px; }
+body[data-responsive-page="start"] #new-journey-modal .choice-btn { font-size: 16px; padding: 12px; }
+body[data-responsive-page="start"] #new-journey-modal :is(.choice-title, .alloc-name) { font-size: clamp(17px, 2.8vmin, 24px); }
+body[data-responsive-page="start"] #new-journey-modal :is(.choice-desc, .alloc-value) { font-size: 15px; }
+body[data-responsive-page="start"] #new-journey-modal .alloc-ops button { width: 40px; height: 40px; }
+body[data-responsive-page="start"] .menu-btn { min-height: 36px; }
+body[data-responsive-page="start"] .menu { max-height: calc(100% - 16px); overflow-y: auto; }
+
+/* Farm: remove the page-header fixed positioning from nested headers. */
+body[data-responsive-page="farm"] :is(.exit-dialog, .popover) header {
+    position: static;
+    height: auto;
+    display: block;
+    font-size: 17px;
+}
+body[data-responsive-page="farm"] .exit-dialog { width: min(420px, 100%); }
+body[data-responsive-page="farm"] .exit-dialog .actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+body[data-responsive-page="farm"] .exit-dialog button { font-size: 15px; padding: 8px 10px; }
+body[data-responsive-page="farm"] #popup {
+    width: min(560px, calc(100% - var(--page-safe-left) - var(--page-safe-right)));
+    max-height: var(--dialog-height);
+    overscroll-behavior: contain;
+}
+body[data-responsive-page="farm"] #popup .popover { font-size: 15px; color: #111; max-height: var(--dialog-height); display: flex; flex-direction: column; }
+body[data-responsive-page="farm"] #popup .popover :is(header, .body) { padding: 10px; }
+body[data-responsive-page="farm"] #popup .popover header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 0 0 auto; }
+body[data-responsive-page="farm"] #popup .popover .body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+body[data-responsive-page="farm"] #popup .popover button { font-size: 14px; padding: 8px; }
+body[data-responsive-page="farm"] #popup .popover .popup-close { min-height: 36px; padding: 6px 12px; flex: 0 0 auto; }
+body[data-responsive-page="farm"] #popup .popover :is(.hint, .bar-row) { font-size: 13px; }
+body[data-responsive-page="farm"] #popup .popover .choices img { height: 32px; }
+body[data-responsive-page="farm"] .event-popup { width: min(480px, 100%); padding: clamp(12px, 3vmin, 28px); }
+/* Pulsing a full-width block created horizontal scroll despite short text. */
+body[data-responsive-page="farm"] .event-icon { width: max-content; margin-inline: auto; font-size: clamp(32px, 8vmin, 56px); margin-bottom: 8px; }
+body[data-responsive-page="farm"] .event-title { font-size: clamp(18px, 4vmin, 24px); }
+body[data-responsive-page="farm"] .event-desc { font-size: 15px; margin-bottom: 12px; }
+body[data-responsive-page="farm"] .event-confirm { font-size: 15px; padding: 8px 20px; }
+body[data-responsive-page="farm"] #shopOverlay .shop {
+    height: 100%; max-height: 100%;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+body[data-responsive-page="farm"] #shopOverlay .shop-header { position: static; height: auto; flex-wrap: wrap; }
+body[data-responsive-page="farm"] #shopOverlay .content { min-height: 0; overscroll-behavior: contain; }
+body[data-responsive-page="farm"] #shopOverlay .items { width: min(100%, 820px); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+body[data-responsive-page="farm"] #shopOverlay .card { width: auto; min-width: 0; aspect-ratio: auto; gap: 6px; }
+body[data-responsive-page="farm"] #shopOverlay .card img { height: clamp(28px, 8vmin, 64px); }
+body[data-responsive-page="farm"] #shopOverlay .card-controls button { font-size: 13px; }
+body[data-responsive-page="farm"] #shopOverlay .card div:not(.card-controls) { font-size: 13px; line-height: 1.4; }
+body[data-responsive-page="farm"] > header { top: env(safe-area-inset-top, 0px); left: env(safe-area-inset-left, 0px); right: env(safe-area-inset-right, 0px); padding: 0 8px; }
+body[data-responsive-page="farm"] > header button { min-height: 36px; font-size: 13px; padding: 6px 8px; }
+body[data-responsive-page="farm"] > header .money { font-size: 14px; }
+body[data-responsive-page="farm"] > header .header-actions { gap: 4px; }
+body[data-responsive-page="farm"] .batch-dropdown { max-height: calc(var(--dialog-height) - var(--header-h)); overflow-y: auto; }
+body[data-responsive-page="farm"] .dropdown-item { min-height: 40px; font-size: 14px; }
+
+/* Alchemy: bounded flex sheets, scroll only their item area; top shortcuts
+   get a dedicated row instead of overlapping the title on narrow screens. */
+body[data-responsive-page="alchemy"] .modal-overlay > .modal {
+    width: min(920px, 100%);
+    height: min(640px, var(--dialog-height));
+    max-height: var(--dialog-height);
+    aspect-ratio: auto;
+    padding: 12px;
+    overflow: hidden;
+}
+body[data-responsive-page="alchemy"] .modal-overlay .modal-content { min-height: 0; overscroll-behavior: contain; }
+body[data-responsive-page="alchemy"] .modal-overlay :is(.modal-title, .modal-buttons) { flex-shrink: 0; }
+body[data-responsive-page="alchemy"] .modal-title { font-size: clamp(20px, 4vmin, 28px); margin-bottom: 8px; }
+body[data-responsive-page="alchemy"] .modal-buttons { flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+body[data-responsive-page="alchemy"] .modal-overlay :is(.modal-btn, .modal-top-btn) { font-size: 16px; padding: 8px 14px; }
+body[data-responsive-page="alchemy"] #herb-modal-overlay > .modal { padding-top: 58px; }
+body[data-responsive-page="alchemy"] #herb-modal-overlay .modal-top-btn { top: 8px; }
+body[data-responsive-page="alchemy"] .herb-item-controls button { width: 40px; height: 40px; flex-shrink: 0; }
+body[data-responsive-page="alchemy"] .herb-selector { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+body[data-responsive-page="alchemy"] .exit-btn { min-height: 36px; font-size: 13px; padding: 6px 10px; }
+@media (min-width: 700px) {
+    body[data-responsive-page="alchemy"] .herb-selector { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* World map: retain layered background and inner flex body, not an overlay
+   layout rule (the identically named .modal-overlay here is decorative). */
+body[data-responsive-page="worldmap"] #locationModal { height: 100%; }
+body[data-responsive-page="worldmap"] #locationModal .modal-content {
+    width: min(600px, calc(100% - var(--page-safe-left) - var(--page-safe-right)));
+    height: min(500px, var(--dialog-height));
+    max-height: var(--dialog-height);
+}
+body[data-responsive-page="worldmap"] #locationModal .modal-inner { min-height: 0; }
+body[data-responsive-page="worldmap"] #locationModal .modal-body { min-height: 0; padding: 12px; overscroll-behavior: contain; overflow-wrap: anywhere; }
+body[data-responsive-page="worldmap"] #locationModal .modal-header { padding: 12px 40px; }
+body[data-responsive-page="worldmap"] #locationModal .modal-footer { height: auto; flex: 0 0 auto; padding: 8px; }
+body[data-responsive-page="worldmap"] #locationModal .btn { padding: 8px 20px; }
+body[data-responsive-page="worldmap"] #locationModal .close-btn { top: 6px; right: 6px; width: 40px; height: 40px; max-width: none; max-height: none; }
+body[data-responsive-page="worldmap"] #locationModal .npc-item { min-height: 44px; }
+body[data-responsive-page="worldmap"] #locationModal .npc-checkbox { min-width: 24px; min-height: 24px; }
+/* Mobile's original 10px intelligence/advice copy was unreadable in screenshots. */
+body[data-responsive-page="worldmap"] #locationModal :is(.info-desc, .advice-item, .danger-level, .npc-hint) { font-size: 13px; line-height: 1.5; }
+
+/* Battle: confirmation/results/stats keep their existing panel appearance;
+   item sheet stays local to game-container, with a scrollable nonshrinking list. */
+body[data-responsive-page="battle"] :is(#confirm-modal, #exit-battle-overlay, #game-over-modal, #stats-modal) > .modal-content {
+    max-height: var(--dialog-height);
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+body[data-responsive-page="battle"] #stats-modal > .modal-content { width: min(520px, 100%); }
+body[data-responsive-page="battle"] :is(#confirm-modal, #exit-battle-overlay, #game-over-modal, #stats-modal) .modal-body {
+    min-height: 0; overflow-y: auto; overscroll-behavior: contain; overflow-wrap: anywhere;
+}
+body[data-responsive-page="battle"] :is(.modal-header, .modal-actions, .modal-footer) { flex-shrink: 0; }
+body[data-responsive-page="battle"] :is(.modal-actions, .modal-footer) { flex-wrap: wrap; gap: 8px; padding: 8px; }
+body[data-responsive-page="battle"] .modal-actions .btn { min-width: 0; flex: 1; font-size: 15px; padding: 8px 10px; }
+body[data-responsive-page="battle"] .stats-row { white-space: normal; min-width: 0; }
+body[data-responsive-page="battle"] #item-modal .item-modal-content {
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+body[data-responsive-page="battle"] #item-modal .item-list { min-height: 0; overflow-y: auto; justify-content: flex-start; overscroll-behavior: contain; }
+body[data-responsive-page="battle"] #item-modal .item-row { flex: 0 0 auto; min-height: 64px; max-height: none; padding: 8px; }
+body[data-responsive-page="battle"] #item-modal .item-name { font-size: 16px; white-space: normal; }
+body[data-responsive-page="battle"] #item-modal .item-desc { font-size: 13px; white-space: normal; }
+body[data-responsive-page="battle"] #item-modal :is(.item-use-btn, .item-close-btn) { font-size: 14px; padding: 8px 14px; }
+body[data-responsive-page="battle"] #item-modal :is(.item-modal-header, .item-modal-footer) { padding: 6px 10px; }
+
+/* Blackjack is itself an iframe panel, with native alert only: preserve document
+   scrolling and give the formerly 25px exit control a labelled touch target. */
+body[data-responsive-page="blackjack"] .container { padding: var(--page-safe-top) var(--page-safe-right) var(--page-safe-bottom) var(--page-safe-left); }
+body[data-responsive-page="blackjack"] .game-area { padding-top: 58px; }
+body[data-responsive-page="blackjack"] .exit-btn { width: 40px; height: 40px; line-height: 40px; font-size: 22px; margin: 0; }
+body[data-responsive-page="blackjack"] :is(button, .bet-input) { min-height: 40px; }
+@media (max-height: 500px) {
+    body[data-responsive-page="farm"] #popup { width: min(374px, calc(100% - 12px)); }
+    body[data-responsive-page="farm"] #popup .popover { font-size: 13px; }
+    body[data-responsive-page="farm"] #popup .popover :is(header, .body) { padding: 6px 8px; }
+    body[data-responsive-page="farm"] #popup .popover .popup-close { min-height: 34px; font-size: 12px; padding: 5px 10px; }
+    body[data-responsive-page="farm"] #popup .popover button { font-size: 12px; padding: 6px; }
+    body[data-responsive-page="farm"] #popup .popover :is(.hint, .bar-row) { font-size: 12px; }
+    body[data-responsive-page="farm"] #popup .popover .choices img { height: 26px; }
+    body[data-responsive-page="alchemy"] .modal-overlay > .modal { width: calc(100% - 12px); }
+    body[data-responsive-page="alchemy"] .modal-overlay :is(.modal-btn, .modal-top-btn) { font-size: 13px; padding: 6px 10px; }
+    body[data-responsive-page="alchemy"] .modal-title { font-size: 18px; margin-bottom: 4px; }
+    body[data-responsive-page="alchemy"] .modal-content { margin: 1% 0; }
+    body[data-responsive-page="alchemy"] .shop-item { padding: 5px; margin: 3px 0; gap: 3px; }
+    body[data-responsive-page="alchemy"] :is(.shop-item-name, .herb-item-name) { font-size: 14px; }
+    body[data-responsive-page="alchemy"] :is(.shop-item-price, .herb-item-count) { font-size: 12px; }
+    body[data-responsive-page="alchemy"] .shop-item-btn { font-size: 12px; padding: 5px 8px; }
+    body[data-responsive-page="alchemy"] .herb-item { padding: 5px; }
+    body[data-responsive-page="alchemy"] .herb-item-controls button { width: 34px; height: 34px; font-size: 16px; }
+    body[data-responsive-page="alchemy"] .herb-item-selected { font-size: 16px; }
+    body[data-responsive-page="alchemy"] .total-herbs { font-size: 16px; margin: 5px 0; padding: 6px; }
+    body[data-responsive-page="start"] #new-journey-modal :is(.choice-btn, .alloc-row) { padding: 8px; }
+    body[data-responsive-page="start"] #new-journey-modal :is(.grid-select, .diff-list, .alloc-wrap) { gap: 8px; }
+    body[data-responsive-page="alchemy"] .modal-overlay > .modal { padding: 8px; }
+    body[data-responsive-page="alchemy"] #herb-modal-overlay > .modal { padding-top: 8px; }
+    body[data-responsive-page="alchemy"] #herb-modal-overlay .modal-title { margin-inline: 76px; min-height: 32px; display: grid; align-items: center; }
+    body[data-responsive-page="alchemy"] .herb-item { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+    body[data-responsive-page="alchemy"] .herb-item-controls { grid-column: 1 / -1; }
+    body[data-responsive-page="alchemy"] :is(.herb-item-name, .herb-item-count) { margin-bottom: 0; align-self: center; }
+    body[data-responsive-page="alchemy"] #herb-modal-overlay .modal-top-btn { min-height: 32px; top: 6px; }
+    body[data-responsive-page="alchemy"] .modal-summary { font-size: 13px !important; margin-bottom: 4px !important; flex-shrink: 0; }
+    body[data-responsive-page="alchemy"] .modal-title { font-size: 18px; }
+    body[data-responsive-page="alchemy"] .herb-selector { gap: 5px; margin: 0; }
+    body[data-responsive-page="farm"] .event-popup { padding: 12px; }
+    body[data-responsive-page="farm"] .event-icon { font-size: 32px; }
+}
+@media (max-width: 360px) {
+    body[data-responsive-page="start"] #new-journey-modal .grid-select { grid-template-columns: 1fr; }
+    body[data-responsive-page="battle"] .stats-grid { grid-template-columns: 1fr; }
+    body[data-responsive-page="alchemy"] .herb-selector { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

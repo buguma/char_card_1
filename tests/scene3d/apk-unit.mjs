@@ -9,7 +9,7 @@ import { deflateRawSync } from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { atomicJson, fileInfo, readJson, sha256 } from '../../scene3d/scripts/artifact-utils.mjs';
 import { createRunRecord, loadRunRecord, withRun } from '../../scene3d/scripts/run-record.mjs';
-import { prepareApk, buildApkWww, HTML_MAPPING, WEB_DIRS, EXPECTED_PLUGINS, validateNativeConfig, validatePlugins } from '../../scene3d/scripts/prepare-apk.mjs';
+import { prepareApk, buildApkWww, HTML_MAPPING, WEB_DIRS, WEB_ROOT_FILES, EXPECTED_PLUGINS, validateNativeConfig, validatePlugins } from '../../scene3d/scripts/prepare-apk.mjs';
 import { verifyStaging } from '../../scene3d/scripts/verify-staging.mjs';
 import { crc32, readZip, parseAndroidManifest, verifyApk, verifyLibraryAssetProvenance } from '../../scene3d/scripts/verify-apk.mjs';
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -27,6 +27,7 @@ async function fixture(t) {
   }
   for (const dir of WEB_DIRS) await put(root, `${dir}/保留.txt`, `original ${dir}`);
   await put(root, 'module/required.js', 'export const fixture = true;');
+  for (const name of WEB_ROOT_FILES) await put(root, name, '/* synthetic reviewed root stylesheet */');
   for (const name of new Set(HTML_MAPPING.map(([source]) => source))) await put(root, name, `<html><script src="module/required.js"></script><script>const page='${name}'; const to='index.html?intent=start';</script></html>`);
   for (const name of ['build.js', 'capacitor.config.json']) await put(root, `apk/${name}`, await fs.readFile(path.join(repository, `apk/${name}`)));
   await put(root, 'apk/gen-icons.js', '// fixture icon script');
@@ -151,6 +152,42 @@ test('prepare copies only current version and full native inputs without source 
   assert.match(await fs.readFile(path.join(prepared.wwwRoot, 'start-screen-noST.html'), 'utf8'), /index\.html\?intent=/);
   assert.ok(expected.files['assets/sect3d/synthetic-build/模型/门派.glb']);
   assert.ok(!Object.keys(expected.files).some(name => name.includes('old-version')));
+});
+
+test('dialog assets and reviewed root CSS retain exact identity through isolated www and staging', async t => {
+  const f = await fixture(t);
+  const names = ['module/game-styles-dialogs.css', 'module/game-dialogs.js', 'ui/settings-dialogs.css', 'secondary-pages-responsive.css'];
+  for (const name of names) await put(f.root, name, `/* synthetic ${name} */`);
+  await put(f.root, 'unreviewed-root.css', 'must not be copied');
+  await put(f.root, 'index.html', '<html><link rel="stylesheet" href="module/game-styles-dialogs.css"><link rel="stylesheet" href="ui/settings-dialogs.css"><script src="module/game-dialogs.js"></script></html>');
+  await put(f.root, 'farm.html', '<html><link rel="stylesheet" href="./secondary-pages-responsive.css?v=1#test"></html>');
+  f.prepared = await f.run('prepare:apk', prepareApk);
+  const input = await readJson(f.prepared.inputManifest);
+  assert.ok(!Object.hasOwn(input.files, 'unreviewed-root.css'));
+  await f.run('apk:www', (record, context) => buildApkWww(record, context, f.prepared.apkRoot));
+  const expected = await readJson(f.prepared.wwwExpectedManifest);
+  await syntheticSync(f);
+  await f.run('verify:staging', verifyStaging);
+  const staged = await readJson(path.join(f.runDir, 'android-staging-manifest.json'));
+  for (const name of names) {
+    const original = await fileInfo(path.join(f.root, name));
+    assert.deepEqual(input.files[name], original, `frozen input: ${name}`);
+    assert.deepEqual(expected.files[name], original, `www expectation: ${name}`);
+    assert.deepEqual(expected.mappings[name], { source: name, transform: 'identity' });
+    assert.deepEqual(await fileInfo(path.join(f.prepared.wwwRoot, name)), original);
+    assert.deepEqual(staged.assetFiles[`public/${name}`], original, `Android public asset: ${name}`);
+  }
+  // Post-freeze root-file mutation must not become a self-authorized asset.
+  await put(f.prepared.wwwRoot, 'secondary-pages-responsive.css', 'mutated');
+  await assert.rejects(() => f.run('verify:staging', verifyStaging), /Byte\/hash mismatch/);
+});
+
+test('reviewed root stylesheet is mandatory before the real project can be frozen', async t => {
+  const f = await fixture(t);
+  await fs.unlink(path.join(f.root, 'secondary-pages-responsive.css'));
+  await assert.rejects(() => f.run('prepare:apk', prepareApk), /ENOENT/);
+  await assert.rejects(() => fs.stat(path.join(f.runDir, 'apk-input-manifest.json')), /ENOENT/);
+  await assert.rejects(() => fs.stat(path.join(f.runDir, 'apk-copy')), /ENOENT/);
 });
 
 test('missing mandatory HTML and JavaScript fail without overwriting source staging', async t => {

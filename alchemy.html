@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>炼丹模拟器</title>
     <link rel="stylesheet" href="module/minigame-fonts.css">
     
@@ -760,8 +760,9 @@
         .event-close-btn:hover { background: var(--ink-black); color: #fff; }
 
     </style>
+    <link rel="stylesheet" href="secondary-pages-responsive.css">
 </head>
-<body>
+<body data-responsive-page="alchemy">
     <!-- 退出确认弹窗 -->
     <div class="exit-overlay" id="exitOverlay" role="dialog" aria-modal="true" aria-label="确认退出炼丹">
         <div class="exit-dialog">
@@ -795,7 +796,7 @@
     <div class="modal-overlay" id="shop-modal-overlay" onclick="closeShopModal()">
         <div class="modal" onclick="event.stopPropagation()">
             <div class="modal-title">药材商城</div>
-            <div style="margin-bottom: 1rem; font-size: clamp(1rem, 2vw, 1.2rem); text-align: center;">
+            <div class="modal-summary" style="margin-bottom: 1rem; font-size: clamp(1rem, 2vw, 1.2rem); text-align: center;">
                 金钱：<span style="color: #bfa36f;" id="money-display">5000</span>
             </div>
             <div class="modal-content" id="shop-content"></div>
