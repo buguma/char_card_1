@@ -1320,7 +1320,7 @@ async function useItem(itemName) {
 }
 
 // 装备道具（简化逻辑：直接修改属性值）
-async function equipItem(itemName) {
+async function equipItem(itemName, returnToInventory = false) {
     const item = item_list[itemName];
     if (!item || !item.可装备 || inventory[itemName] <= 0) return;
     
@@ -1385,7 +1385,8 @@ async function equipItem(itemName) {
     // showModal(`装备了${itemName}！`);
     
     closeItemDetailModal();
-    showEquipment();
+    if (returnToInventory) showInventory();
+    else showEquipment();
 }
 
 // 卸下装备（简化逻辑：直接修改属性值）

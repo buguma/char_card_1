@@ -42,7 +42,7 @@ export function parseGradleIdentity(code) {
   const applicationId = /\bapplicationId\s*(?:=\s*)?["']([^"']+)["']/.exec(code)?.[1];
   const versionCode = Number(/\bversionCode\s*(?:=\s*)?(\d+)/.exec(code)?.[1]);
   const versionName = /\bversionName\s*(?:=\s*)?["']([^"']+)["']/.exec(code)?.[1];
-  assert(applicationId === 'com.jihaitang.jxz' && versionCode === 4 && versionName === '1.3', 'Unapproved Android application/version change');
+  assert(applicationId === 'com.jihaitang.jxz' && versionCode === 5 && versionName === '1.4', 'Unapproved Android application/version change');
   return { applicationId, versionCode, versionName };
 }
 export function apkPaths(record, runDir) {
@@ -68,6 +68,8 @@ async function collectTree(root, relative, files, { exclude3d = false, excludeNa
     const name = `${relative}/${item.name}`.replaceAll('\\', '/');
     if (EXCLUDE_DIRS.has(item.name) || item.name.startsWith('.') || SECRET_FILE.test(item.name)) continue;
     if (exclude3d && name === 'assets/sect3d') continue;
+    // User-supplied design reference, not a runtime game asset.
+    if (name === 'assets/image/others/UI设计方案.png') continue;
     if (excludeNativeAssets && name.startsWith('apk/android/app/src/main/assets')) continue;
     safeRelative(name); assert(!item.isSymbolicLink(), `Source symlink prohibited: ${name}`);
     if (item.isDirectory()) await collectTree(root, name, files, { exclude3d, excludeNativeAssets });

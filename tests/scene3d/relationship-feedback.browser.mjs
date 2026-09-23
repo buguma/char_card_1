@@ -25,8 +25,11 @@ try {
    },width>height);
    await page.waitForSelector('#relationships-scene.active');
    await page.screenshot({path:path.join(output,`${label}-cards.png`)});
+   const gridCols=await page.evaluate(()=>getComputedStyle(document.querySelector('#relationship-grid')).gridTemplateColumns.trim().split(/\s+/).length);
+   if(width>height){assert.equal(gridCols,4,`landscape ${label} grid cols=${gridCols}`);}else{assert.ok(gridCols>=3,`portrait ${label} grid cols=${gridCols}`);}
    const cards=await page.evaluate(()=>[...document.querySelectorAll('.relationship-value')].slice(0,2).map(e=>{const number=e.querySelector('.relationship-value-number');const range=document.createRange();range.selectNodeContents(number);const rects=[...range.getClientRects()];return {text:e.textContent,font:parseFloat(getComputedStyle(e).fontSize),overflow:e.scrollWidth>e.clientWidth,lines:rects.length,rects:rects.map(r=>({top:r.top,bottom:r.bottom}))};}));
-   assert.ok(cards.every(c=>c.lines===1&&!c.overflow&&c.font===(width<=600?11:14)),JSON.stringify(cards));
+   const expectedFont=(width<=600||(width>height&&width<=900))?11:14;
+   assert.ok(cards.every(c=>c.lines===1&&!c.overflow&&c.font===expectedFont),JSON.stringify(cards));
    assert.equal(await page.$$eval('#relationship-grid .gift-btn',e=>e.length),0);
    await page.tap('.relationship-card:first-child .relationship-name');
    const bounds=await page.evaluate(()=>{const t=document.getElementById('tooltip').getBoundingClientRect(),v=document.getElementById('main-viewport').getBoundingClientRect();return {within:t.left>=v.left&&t.right<=v.right&&t.top>=v.top&&t.bottom<=v.bottom,tip:{left:t.left,top:t.top,right:t.right,bottom:t.bottom},viewport:{left:v.left,top:v.top,right:v.right,bottom:v.bottom}};});

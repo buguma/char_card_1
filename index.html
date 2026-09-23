@@ -98,7 +98,15 @@
     <!-- 主游戏弹窗最终表现层：独立于场景比例，保留古风/扁平素材与业务节点 -->
     <link rel="stylesheet" href="module/game-styles-dialogs.css?v=responsive-dialogs-1">
     <link rel="stylesheet" href="module/relationship-feedback.css">
+    <link rel="stylesheet" href="module/map-label-feedback.css">
     <script src="module/game-dialogs.js?v=responsive-dialogs-1" defer></script>
+    <link rel="stylesheet" href="module/inventory-panel.css?v=1">
+    <link rel="stylesheet" href="module/equipment-panel.css?v=1">
+    <link rel="stylesheet" href="module/dialog-panel.css?v=1">
+    <script src="module/inventory-panel.js?v=1" defer></script>
+    <script src="module/equipment-panel.js?v=1" defer></script>
+    <script src="module/dialog-panel.js?v=1" defer></script>
+    <script src="module/viewport-corner-sync.js?v=1" defer></script>
 </head>
 <body>
     <div class="container">
@@ -602,20 +610,18 @@
                 <div class="gs-layout">
                     <!-- 左侧选项卡列 -->
                     <div class="gs-tabs" id="gs-tabs">
-                        <button class="gs-tab active" data-tab="switches" onclick="gsSelectTab('switches')">开关设置</button>
+                        <button class="gs-tab active" data-tab="switches" onclick="gsSelectTab('switches')">通用设置</button>
                         <button class="gs-tab" data-tab="difficulty" onclick="gsSelectTab('difficulty')">难度设置</button>
-                        <button class="gs-tab" data-tab="music" onclick="gsSelectTab('music')">音乐设置</button>
-                        <button class="gs-tab" data-tab="font" onclick="gsSelectTab('font')">正文字体</button>
                         <button class="gs-tab" data-tab="summary" onclick="gsSelectTab('summary')">总结管理</button>
                         <button class="gs-tab" data-tab="recall" onclick="gsSelectTab('recall')">召回管理</button>
                         <button class="gs-tab" data-tab="prompts" onclick="gsSelectTab('prompts')">提示词管理</button>
-                        <button class="gs-tab" data-tab="scene3d" onclick="gsSelectTab('scene3d')">3D画面</button>
                     </div>
                     <!-- 右侧内容区 -->
                     <div class="gs-panel-wrap">
-                        <!-- 开关设置 -->
+                        <!-- 通用设置 -->
                         <div class="gs-panel active" id="gs-panel-switches">
-                            <h3>开关设置</h3>
+                            <h3>通用设置</h3>
+                            <h4 class="gs-subhead">UI设置</h4>
                             <div class="gs-switch-row">
                                 <span class="gs-switch-label">界面风格</span>
                                 <label class="gs-toggle-wrap">
@@ -632,6 +638,7 @@
                                     <span class="gs-toggle-hint" id="gs-layout-hint">竖屏</span>
                                 </label>
                             </div>
+                            <h4 class="gs-subhead">功能开关</h4>
                             <div class="gs-switch-row">
                                 <span class="gs-switch-label">CG内容</span>
                                 <label class="gs-toggle-wrap">
@@ -647,6 +654,109 @@
                                     <span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span>
                                     <span class="gs-toggle-hint" id="gs-event-hint">开</span>
                                 </label>
+                            </div>
+                            <!-- 正文字体 -->
+                            <h4 class="gs-subhead">正文字体</h4>
+                            <div class="gs-switch-row">
+                                <span class="gs-switch-label">正文大小</span>
+                                <div class="gs-font-row">
+                                    <span>小</span>
+                                    <input type="range" id="gs-font-range" class="gs-range" min="1" max="5" step="1" value="2" oninput="gsOnFontLevel(this)">
+                                    <span>大</span>
+                                </div>
+                            </div>
+                            <!-- 音乐设置 -->
+                            <h4 class="gs-subhead">音乐设置</h4>
+                            <div class="gs-switch-row">
+                                <span class="gs-switch-label">背景音乐</span>
+                                <label class="gs-toggle-wrap">
+                                    <input type="checkbox" id="gs-bgm-toggle" onchange="gsOnBgmEnable(this)">
+                                    <span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span>
+                                    <span class="gs-toggle-hint" id="gs-bgm-hint">开启</span>
+                                </label>
+                            </div>
+                            <div class="gs-collapsible" id="gs-music-detail">
+                                <div class="gs-switch-row">
+                                    <span class="gs-switch-label">音量</span>
+                                    <div class="gs-range-row">
+                                        <input type="range" id="gs-bgm-volume" class="gs-range" min="0" max="100" step="1" value="50" oninput="gsOnBgmVolume(this)">
+                                        <span id="gs-bgm-volume-display">50%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- 3D画面 -->
+                            <h4 class="gs-subhead">3D画面</h4>
+                            <!-- <p class="gs-scene3d-note">画质统一默认为「均衡」，不按设备自动降级；渲染分辨率、MSAA、阴影、氛围与调色可在下方自行调整。</p> -->
+                            <div class="gs-switch-row">
+                                <span class="gs-switch-label">启用3D场景</span>
+                                <label class="gs-toggle-wrap">
+                                    <input type="checkbox" id="gs-scene3d-enable" onchange="gsOnScene3dEnable(this)">
+                                    <span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span>
+                                    <span class="gs-toggle-hint" id="gs-scene3d-enable-hint">关</span>
+                                </label>
+                            </div>
+                            <div class="gs-collapsible" id="gs-scene3d-detail">
+                                <div class="gs-switch-row">
+                                    <span class="gs-switch-label">渲染分辨率</span>
+                                    <select id="gs-scene3d-renderScale" class="gs-select" onchange="gsOnScene3dRenderScale(this)">
+                                        <option value="1">1×</option>
+                                        <option value="1.25">1.25×</option>
+                                        <option value="1.5">1.5×</option>
+                                        <option value="2">2×</option>
+                                    </select>
+                                </div>
+                                <div class="gs-switch-row">
+                                    <span class="gs-switch-label">抗锯齿 MSAA</span>
+                                    <select id="gs-scene3d-msaa" class="gs-select" onchange="gsOnScene3dMsaa(this)">
+                                        <option value="2">2×</option>
+                                        <option value="4">4×</option>
+                                    </select>
+                                </div>
+                                <div class="gs-switch-row">
+                                    <span class="gs-switch-label">日月光影</span>
+                                    <label class="gs-toggle-wrap">
+                                        <input type="checkbox" id="gs-scene3d-shadows" onchange="gsOnScene3dShadows(this)">
+                                        <span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span>
+                                        <span class="gs-toggle-hint" id="gs-scene3d-shadows-hint">开</span>
+                                    </label>
+                                </div>
+                                <div class="gs-switch-row">
+                                    <span class="gs-switch-label">云海与远山薄雾</span>
+                                    <label class="gs-toggle-wrap">
+                                        <input type="checkbox" id="gs-scene3d-atmosphere" onchange="gsOnScene3dAtmosphere(this)">
+                                        <span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span>
+                                        <span class="gs-toggle-hint" id="gs-scene3d-atmosphere-hint">开</span>
+                                    </label>
+                                </div>
+                                <div class="gs-range-row">
+                                    <div class="gs-range-head"><label>丁达尔光束</label><span id="gs-scene3d-shaft-display">0.85</span></div>
+                                    <input type="range" id="gs-scene3d-shaft" class="gs-range" min="0" max="2" step="0.05" value="0.85" oninput="gsOnScene3dTuning('shaft', this)">
+                                </div>
+                                <div class="gs-range-row">
+                                    <div class="gs-range-head"><label>泛光强度</label><span id="gs-scene3d-bloom-display">1</span></div>
+                                    <input type="range" id="gs-scene3d-bloom" class="gs-range" min="0" max="2.5" step="0.05" value="1" oninput="gsOnScene3dTuning('bloom', this)">
+                                </div>
+                                <div class="gs-range-row">
+                                    <div class="gs-range-head"><label>饱和度</label><span id="gs-scene3d-saturation-display">1.4</span></div>
+                                    <input type="range" id="gs-scene3d-saturation" class="gs-range" min="0.5" max="2" step="0.05" value="1.4" oninput="gsOnScene3dTuning('saturation', this)">
+                                </div>
+                                <div class="gs-range-row">
+                                    <div class="gs-range-head"><label>对比度</label><span id="gs-scene3d-contrast-display">1.4</span></div>
+                                    <input type="range" id="gs-scene3d-contrast" class="gs-range" min="0.7" max="1.6" step="0.05" value="1.4" oninput="gsOnScene3dTuning('contrast', this)">
+                                </div>
+                                <div class="gs-range-row">
+                                    <div class="gs-range-head"><label>中间调</label><span id="gs-scene3d-gamma-display">0.88</span></div>
+                                    <input type="range" id="gs-scene3d-gamma" class="gs-range" min="0.7" max="1.3" step="0.05" value="0.88" oninput="gsOnScene3dTuning('gamma', this)">
+                                </div>
+                                <div class="gs-range-row">
+                                    <div class="gs-range-head"><label>暖调</label><span id="gs-scene3d-warmth-display">0.38</span></div>
+                                    <input type="range" id="gs-scene3d-warmth" class="gs-range" min="0" max="1" step="0.05" value="0.38" oninput="gsOnScene3dTuning('warmth', this)">
+                                </div>
+                                <div class="gs-range-row">
+                                    <div class="gs-range-head"><label>暗角</label><span id="gs-scene3d-vignette-display">0.85</span></div>
+                                    <input type="range" id="gs-scene3d-vignette" class="gs-range" min="0" max="1" step="0.05" value="0.85" oninput="gsOnScene3dTuning('vignette', this)">
+                                </div>
+                                <p class="gs-scene3d-note">3D失败会自动回退2D，不影响存档。</p>
                             </div>
                         </div>
                         <!-- 难度设置 -->
@@ -677,34 +787,6 @@
                             </div>
                             <div class="modal-buttons" style="margin-top:16px;">
                                 <button class="modal-btn" onclick="gsOnSaveDifficulty()">确认</button>
-                            </div>
-                        </div>
-                        <!-- 音乐设置 -->
-                        <div class="gs-panel" id="gs-panel-music">
-                            <h3>音乐设置</h3>
-                            <div class="gs-switch-row">
-                                <span class="gs-switch-label">背景音乐</span>
-                                <label class="gs-toggle-wrap">
-                                    <input type="checkbox" id="gs-bgm-toggle" onchange="gsOnBgmEnable(this)">
-                                    <span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span>
-                                    <span class="gs-toggle-hint" id="gs-bgm-hint">开启</span>
-                                </label>
-                            </div>
-                            <div style="margin:20px 0 8px;">
-                                <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-                                    <label>音量</label>
-                                    <span id="gs-bgm-volume-display">50%</span>
-                                </div>
-                                <input type="range" id="gs-bgm-volume" class="gs-range" min="0" max="100" step="1" value="50" oninput="gsOnBgmVolume(this)">
-                            </div>
-                        </div>
-                        <!-- 正文字体 -->
-                        <div class="gs-panel" id="gs-panel-font">
-                            <h3>正文字体大小</h3>
-                            <div style="display:flex;align-items:center;gap:12px;margin:16px 0;">
-                                <span>小</span>
-                                <input type="range" id="gs-font-range" class="gs-range" min="1" max="5" step="1" value="2" oninput="gsOnFontLevel(this)">
-                                <span>大</span>
                             </div>
                         </div>
                         <!-- 总结管理 -->
@@ -795,80 +877,6 @@
                         <div class="gs-panel" id="gs-panel-prompts">
                             <h3>提示词管理</h3>
                             <div id="gs-prompt-manager-root"></div>
-                        </div>
-                        <!-- 3D画面 -->
-                        <div class="gs-panel" id="gs-panel-scene3d">
-                            <h3>3D画面</h3>
-                            <p class="gs-scene3d-note">画质统一默认为「均衡」，不按设备自动降级；渲染分辨率、MSAA、阴影、氛围与调色可在下方自行调整。</p>
-                            <div class="gs-switch-row">
-                                <span class="gs-switch-label">启用3D场景</span>
-                                <label class="gs-toggle-wrap">
-                                    <input type="checkbox" id="gs-scene3d-enable" onchange="gsOnScene3dEnable(this)">
-                                    <span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span>
-                                    <span class="gs-toggle-hint" id="gs-scene3d-enable-hint">关</span>
-                                </label>
-                            </div>
-                            <div class="gs-switch-row">
-                                <span class="gs-switch-label">渲染分辨率</span>
-                                <select id="gs-scene3d-renderScale" class="gs-select" onchange="gsOnScene3dRenderScale(this)">
-                                    <option value="1">1×</option>
-                                    <option value="1.25">1.25×</option>
-                                    <option value="1.5">1.5×</option>
-                                    <option value="2">2×</option>
-                                </select>
-                            </div>
-                            <div class="gs-switch-row">
-                                <span class="gs-switch-label">抗锯齿 MSAA</span>
-                                <select id="gs-scene3d-msaa" class="gs-select" onchange="gsOnScene3dMsaa(this)">
-                                    <option value="2">2×</option>
-                                    <option value="4">4×</option>
-                                </select>
-                            </div>
-                            <div class="gs-switch-row">
-                                <span class="gs-switch-label">日月光影</span>
-                                <label class="gs-toggle-wrap">
-                                    <input type="checkbox" id="gs-scene3d-shadows" onchange="gsOnScene3dShadows(this)">
-                                    <span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span>
-                                    <span class="gs-toggle-hint" id="gs-scene3d-shadows-hint">开</span>
-                                </label>
-                            </div>
-                            <div class="gs-switch-row">
-                                <span class="gs-switch-label">云海与远山薄雾</span>
-                                <label class="gs-toggle-wrap">
-                                    <input type="checkbox" id="gs-scene3d-atmosphere" onchange="gsOnScene3dAtmosphere(this)">
-                                    <span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span>
-                                    <span class="gs-toggle-hint" id="gs-scene3d-atmosphere-hint">开</span>
-                                </label>
-                            </div>
-                            <div class="gs-range-row">
-                                <div class="gs-range-head"><label>丁达尔光束</label><span id="gs-scene3d-shaft-display">0.85</span></div>
-                                <input type="range" id="gs-scene3d-shaft" class="gs-range" min="0" max="2" step="0.05" value="0.85" oninput="gsOnScene3dTuning('shaft', this)">
-                            </div>
-                            <div class="gs-range-row">
-                                <div class="gs-range-head"><label>泛光强度</label><span id="gs-scene3d-bloom-display">1</span></div>
-                                <input type="range" id="gs-scene3d-bloom" class="gs-range" min="0" max="2.5" step="0.05" value="1" oninput="gsOnScene3dTuning('bloom', this)">
-                            </div>
-                            <div class="gs-range-row">
-                                <div class="gs-range-head"><label>饱和度</label><span id="gs-scene3d-saturation-display">1.4</span></div>
-                                <input type="range" id="gs-scene3d-saturation" class="gs-range" min="0.5" max="2" step="0.05" value="1.4" oninput="gsOnScene3dTuning('saturation', this)">
-                            </div>
-                            <div class="gs-range-row">
-                                <div class="gs-range-head"><label>对比度</label><span id="gs-scene3d-contrast-display">1.4</span></div>
-                                <input type="range" id="gs-scene3d-contrast" class="gs-range" min="0.7" max="1.6" step="0.05" value="1.4" oninput="gsOnScene3dTuning('contrast', this)">
-                            </div>
-                            <div class="gs-range-row">
-                                <div class="gs-range-head"><label>中间调</label><span id="gs-scene3d-gamma-display">0.88</span></div>
-                                <input type="range" id="gs-scene3d-gamma" class="gs-range" min="0.7" max="1.3" step="0.05" value="0.88" oninput="gsOnScene3dTuning('gamma', this)">
-                            </div>
-                            <div class="gs-range-row">
-                                <div class="gs-range-head"><label>暖调</label><span id="gs-scene3d-warmth-display">0.38</span></div>
-                                <input type="range" id="gs-scene3d-warmth" class="gs-range" min="0" max="1" step="0.05" value="0.38" oninput="gsOnScene3dTuning('warmth', this)">
-                            </div>
-                            <div class="gs-range-row">
-                                <div class="gs-range-head"><label>暗角</label><span id="gs-scene3d-vignette-display">0.85</span></div>
-                                <input type="range" id="gs-scene3d-vignette" class="gs-range" min="0" max="1" step="0.05" value="0.85" oninput="gsOnScene3dTuning('vignette', this)">
-                            </div>
-                            <p class="gs-scene3d-note">3D失败会自动回退2D，不影响存档。</p>
                         </div>
                     </div>
                 </div>
@@ -1108,58 +1116,35 @@
         </div>
 
         <!-- 背包弹窗 -->
-        <div id="inventory-modal" class="modal viewport-overlay">
-            <div class="modal-content inventory-content">
-                <h3>背包</h3>
-                <div class="inventory-grid" id="inventory-grid">
-                    <!-- 动态生成 -->
+        <div id="inventory-modal" class="inventory-panel" style="display:none">
+            <section class="inventory-panel-shell" role="dialog" aria-modal="true" aria-labelledby="inventory-title">
+                <header class="inventory-panel-header"><h2 id="inventory-title">背包</h2><button type="button" data-inventory-close>退出</button></header>
+                <div class="inventory-panel-columns">
+                    <nav class="inventory-categories" aria-label="物品分类">
+                        <button type="button" data-inventory-category="武器">武器</button>
+                        <button type="button" data-inventory-category="防具">防具</button>
+                        <button type="button" data-inventory-category="饰品">饰品</button>
+                        <button type="button" data-inventory-category="消耗品">消耗品</button>
+                        <button type="button" data-inventory-category="其他">其他</button>
+                    </nav>
+                    <div id="inventory-grid" class="inventory-panel-list" aria-label="库存物品"></div>
+                    <section class="inventory-panel-detail" aria-label="物品详情">
+                        <div id="inventory-detail" aria-live="polite"></div>
+                        <div id="inventory-actions"></div>
+                    </section>
                 </div>
-                <div class="modal-buttons">
-                    <button class="modal-btn cancel" onclick="closeInventoryModal()">关闭</button>
-                </div>
-            </div>
+            </section>
         </div>
 
-        <!-- 装备弹窗 -->
-        <div id="equipment-modal" class="modal viewport-overlay">
-            <div class="modal-content equipment-content">
-                <h3>装备栏</h3>
-                <div class="equipment-slots">
-                    <div class="equipment-slot">
-                        <div class="slot-label">武器</div>
-                        <div class="slot-item" id="weapon-slot">
-                            <div class="empty-slot">空</div>
-                        </div>
-                    </div>
-                    <div class="equipment-slot">
-                        <div class="slot-label">防具</div>
-                        <div class="slot-item" id="armor-slot">
-                            <div class="empty-slot">空</div>
-                        </div>
-                    </div>
-                    <div class="equipment-slot">
-                        <div class="slot-label">饰品1</div>
-                        <div class="slot-item" id="accessory1-slot">
-                            <div class="empty-slot">空</div>
-                        </div>
-                    </div>
-                    <div class="equipment-slot">
-                        <div class="slot-label">饰品2</div>
-                        <div class="slot-item" id="accessory2-slot">
-                            <div class="empty-slot">空</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="equipment-stats">
-                    <h4>当前装备效果</h4>
-                    <div id="equipment-effect">
-                        <!-- 动态显示装备效果 -->
-                    </div>
-                </div>
-                <div class="modal-buttons">
-                    <button class="modal-btn cancel" onclick="closeEquipmentModal()">关闭</button>
-                </div>
-            </div>
+        <!-- 装备弹窗（填满 viewport 的四槽网格，属性直接显示在装备下方） -->
+        <div id="equipment-modal" class="equipment-panel" style="display:none">
+            <section class="equipment-panel-shell" role="dialog" aria-modal="true" aria-labelledby="equipment-title">
+                <header class="equipment-panel-header">
+                    <h2 id="equipment-title">装备栏</h2>
+                    <button type="button" data-equipment-close>退出</button>
+                </header>
+                <div class="equipment-panel-grid" id="equipment-grid" aria-label="装备栏"></div>
+            </section>
         </div>
 
         <!-- 道具详情弹窗 -->
@@ -1174,50 +1159,26 @@
             </div>
         </div>
 
-        <!-- 交易弹窗 -->
-        <div id="trading-modal" class="modal viewport-overlay">
-            <div class="modal-content trading-content">
-                <div class="trading-container">
-                    <!-- 左侧：用户物品 -->
-                    <div class="trading-section user-items">
-                        <h4 class="user-money-header">当前金钱: <span id="trading-money-value">0</span></h4>
-                        <div class="trading-list" id="user-items-list">
-                            <!-- 动态生成 -->
-                        </div>
-                    </div>
-                    
-                    <!-- 分隔线 -->
-                    <div class="trading-divider"></div>
-                    
-                    <!-- 右侧：商店物品 -->
-                    <div class="trading-section shop-items">
-                        <h4 id="shop-title">商店物品</h4>
-                        <div class="trading-list" id="shop-items-list">
-                            <!-- 动态生成 -->
-                        </div>
-                    </div>
+        <!-- 交易弹窗（背包式三栏：买入/卖出 + 列表 + 详情） -->
+        <div id="trading-modal" class="dialog-panel" style="display:none">
+            <section class="dialog-panel-shell" role="dialog" aria-modal="true" aria-labelledby="trading-title">
+                <header class="dialog-panel-header">
+                    <span class="dialog-panel-money" id="trading-money-value">当前金钱：0</span>
+                    <h2 id="trading-title">交易</h2>
+                    <button type="button" data-dialog-close>退出</button>
+                </header>
+                <div class="dialog-panel-columns">
+                    <nav class="dialog-tabs" aria-label="交易类型">
+                        <button type="button" data-dialog-tab="buy">买入</button>
+                        <button type="button" data-dialog-tab="sell">卖出</button>
+                    </nav>
+                    <div id="trading-list" class="dialog-list" aria-label="交易物品"></div>
+                    <section class="dialog-detail" aria-label="物品详情">
+                        <div id="trading-detail" class="dialog-detail-body" aria-live="polite"></div>
+                        <div id="trading-actions" class="dialog-detail-actions"></div>
+                    </section>
                 </div>
-                <div class="modal-buttons">
-                    <button class="modal-btn cancel" onclick="closeTrading()">关闭</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 商品详情弹窗 -->
-        <div id="shop-detail-modal" class="modal">
-            <div class="modal-content shop-detail-content">
-                <h3 id="shop-item-name"></h3>
-                <div class="shop-item-description" id="shop-item-description"></div>
-                <div class="shop-item-info" id="shop-item-info"></div>
-                <div class="shop-item-price-info">
-                    <div class="price-label">价格：</div>
-                    <div class="price-value" id="shop-item-price"></div>
-                </div>
-                <div class="modal-buttons">
-                    <button class="modal-btn" id="shop-buy-btn" onclick="buyItemFromDetail()">购买</button>
-                    <button class="modal-btn cancel" onclick="closeShopDetailModal()">关闭</button>
-                </div>
-            </div>
+            </section>
         </div>
 
         <!-- 故事区域 -->
@@ -4171,397 +4132,175 @@ function buildSaveName() {
 
         // 显示背包
         function showInventory() {
-            closeAllSpecialModals();
-            const grid = document.getElementById('inventory-grid');
-            grid.innerHTML = '';
-            
-            for (const [itemName, quantity] of Object.entries(inventory)) {
-                if (quantity > 0) {
-                    const itemData = item_list[itemName];
-                    const itemDiv = document.createElement('div');
-                    itemDiv.className = 'inventory-item';
-                    itemDiv.onclick = () => showItemDetail(itemName);
-                    
-                    let icon = '📦';
-                    if (itemData) {
-                        if (itemData.装备类型 === '武器') icon = '⚔️';
-                        else if (itemData.装备类型 === '防具') icon = '🛡️';
-                        else if (itemData.装备类型 === '饰品') icon = '💎';
-                        else if (itemData.可使用) icon = '🍖';
-                    }
-                    
-                    itemDiv.innerHTML = `
-                        <div class="item-icon">${icon}</div>
-                        <div class="item-name">${itemName}</div>
-                        <div class="item-quantity">×${quantity}</div>
-                    `;
-                    
-                    grid.appendChild(itemDiv);
-                }
-            }
-            
-            if (grid.children.length === 0) {
-                grid.innerHTML = '<div style="text-align: center; color: #999; padding: 40px;">背包空空如也</div>';
-            }
-            
-            const modal = document.getElementById('inventory-modal');
-            modal.style.display = 'block';
-            
-            // 延迟一帧后调整位置
-            requestAnimationFrame(() => {
-                fitModalToViewport(modal);
-                bindModalAutoFit(modal);
-            });
-            
-            toggleDropdown('attribute-dropdown');
+            window.InventoryPanel.open();
         }
 
         // 显示装备
         function showEquipment() {
-            closeAllSpecialModals();
-            updateEquipmentSlot('weapon-slot', equipment.武器);
-            updateEquipmentSlot('armor-slot', equipment.防具);
-            updateEquipmentSlot('accessory1-slot', equipment.饰品1);
-            updateEquipmentSlot('accessory2-slot', equipment.饰品2);
-
-            const slotBindings = [
-                { id: 'weapon-slot', item: equipment.武器 },
-                { id: 'armor-slot', item: equipment.防具 },
-                { id: 'accessory1-slot', item: equipment.饰品1 },
-                { id: 'accessory2-slot', item: equipment.饰品2 }
-            ];
-            slotBindings.forEach(({ id, item }) => {
-                const slot = document.getElementById(id);
-                if (!slot) return;
-                if (item) {
-                    slot.onclick = () => showEquippedItemDetail(item);
-                    slot.style.cursor = 'pointer';
-                } else {
-                    slot.onclick = null;
-                    slot.style.cursor = 'default';
-                }
-            });
-            
-            // 显示当前装备效果
-            const effectDiv = document.getElementById('equipment-effect');
-            effectDiv.innerHTML = '';
-            
-            let hasEffect = false;
-            for (const [slot, itemName] of Object.entries(equipment)) {
-                if (itemName && item_list[itemName]) {
-                    const item = item_list[itemName];
-                    effectDiv.innerHTML += `<div class="stat-effect">${itemName}: ${getEquipEffectText(item)}</div>`;
-                    hasEffect = true;
-                }
-            }
-            
-            if (!hasEffect) {
-                effectDiv.innerHTML = '<div style="color: #999;">暂无装备效果</div>';
-            }
-            
-            const modal = document.getElementById('equipment-modal');
-            modal.style.display = 'block';
-            
-            // 延迟一帧后调整位置
-            requestAnimationFrame(() => {
-                fitModalToViewport(modal);
-                bindModalAutoFit(modal);
-            });
-            
-            toggleDropdown('attribute-dropdown');
-        }
-
-        // 显示已装备物品详情
-        function showEquippedItemDetail(itemName) {
-            const item = item_list[itemName];
-            if (!item) return;
-
-            const existingDetailModal = document.getElementById('item-detail-modal');
-            if (existingDetailModal.style.display === 'block') {
-                closeItemDetailModal();
-            }
-
-            document.getElementById('item-name').textContent = itemName;
-            document.getElementById('item-description').textContent = item.描述;
-
-            let infoHTML = '';
-            if (item.可交易) {
-                infoHTML += `<div class="item-stat"><span class="item-stat-label">买入价格：</span>${item.买入价格} 金</div>`;
-                infoHTML += `<div class="item-stat"><span class="item-stat-label">卖出价格：</span>${item.卖出价格} 金</div>`;
-            }
-            if (item.可装备) {
-                infoHTML += `<div class="item-stat"><span class="item-stat-label">装备类型：</span>${item.装备类型}</div>`;
-                infoHTML += `<div class="item-stat"><span class="item-stat-label">装备属性：</span>${getEquipEffectText(item)}</div>`;
-            }
-            if (item.可使用) {
-                infoHTML += `<div class="item-stat"><span class="item-stat-label">使用效果：</span>${getItemEffectText(item)}</div>`;
-            }
-            document.getElementById('item-info').innerHTML = infoHTML;
-
-            const actionsDiv = document.getElementById('item-actions');
-            actionsDiv.innerHTML = '';
-
-            const unequipBtn = document.createElement('button');
-            unequipBtn.className = 'modal-btn unequip-btn';
-            unequipBtn.textContent = '卸下';
-            unequipBtn.onclick = () => unequipItem(itemName);
-            actionsDiv.appendChild(unequipBtn);
-
-            const closeBtn = document.createElement('button');
-            closeBtn.className = 'modal-btn cancel';
-            closeBtn.textContent = '关闭';
-            closeBtn.onclick = () => closeItemDetailModal();
-            actionsDiv.appendChild(closeBtn);
-
-            const modal = document.getElementById('item-detail-modal');
-            modal.style.display = 'block';
-
-            const equipmentModal = document.getElementById('equipment-modal');
-            const equipmentRect = equipmentModal.getBoundingClientRect();
-            const detailContent = modal.querySelector('.modal-content');
-
-            detailContent.style.position = 'fixed';
-            detailContent.style.left = equipmentRect.left + equipmentRect.width / 2 + 'px';
-            detailContent.style.top = equipmentRect.top + equipmentRect.height / 2 + 'px';
-            detailContent.style.transform = 'translate(-50%, -50%)';
+            window.EquipmentPanel.open();
         }
 
         // 关闭弹窗函数
         function closeInventoryModal() {
-            const modal = document.getElementById('inventory-modal');
-            modal.style.display = 'none';
-            modal._unbindFit && modal._unbindFit();
+            window.InventoryPanel.close();
         }
 
         function closeEquipmentModal() {
-            const modal = document.getElementById('equipment-modal');
-            modal.style.display = 'none';
-            modal._unbindFit && modal._unbindFit();
+            window.EquipmentPanel.close();
         }
 
         // 当前交易类型
         let currentTradingType = 'food';
+        let currentTradingTab = 'buy';
+        let selectedTradeItem = null;
+        let tradingPanel = null;
+
+        function tNode(tag, text, className) {
+            const el = document.createElement(tag);
+            if (text !== undefined && text !== null) el.textContent = text;
+            if (className) el.className = className;
+            return el;
+        }
+
+        function ensureTradingPanel() {
+            if (tradingPanel) return;
+            const modal = document.getElementById('trading-modal');
+            tradingPanel = DialogPanel.mount(modal);
+            modal.addEventListener('click', event => {
+                const button = event.target.closest('button');
+                if (!button || !modal.contains(button)) return;
+                if (button.hasAttribute('data-dialog-close')) return;
+                if (button.dataset.dialogTab) {
+                    currentTradingTab = button.dataset.dialogTab;
+                    selectedTradeItem = null;
+                    renderTrading();
+                } else if (button.dataset.tradeItem) {
+                    selectedTradeItem = button.dataset.tradeItem;
+                    renderTrading();
+                } else if (button.dataset.tradeAction === 'buy' && selectedTradeItem) {
+                    buyItem(selectedTradeItem);
+                } else if (button.dataset.tradeAction === 'sell' && selectedTradeItem) {
+                    sellItem(selectedTradeItem);
+                }
+            });
+        }
+
+        function getShopItems() {
+            if (currentTradingType === 'food') return ['胡饼', '桂花糕', '烤羊腿'];
+            return ['制式铁剑', '精钢长剑', '普通弟子服', '铁环软锁甲'];
+        }
+
+        function renderTrading() {
+            const modal = document.getElementById('trading-modal');
+            const list = document.getElementById('trading-list');
+            const detail = document.getElementById('trading-detail');
+            const actions = document.getElementById('trading-actions');
+            if (!modal || !list || !detail || !actions) return;
+
+            document.getElementById('trading-money-value').textContent = '当前金钱：' + (playerStats?.金钱 || 0) + ' 金';
+            document.getElementById('trading-title').textContent = currentTradingType === 'food' ? '伙房交易' : '铁匠铺交易';
+
+            modal.querySelectorAll('[data-dialog-tab]').forEach(b => {
+                b.setAttribute('aria-pressed', String(b.dataset.dialogTab === currentTradingTab));
+            });
+
+            let items = [];
+            if (currentTradingTab === 'buy') {
+                items = getShopItems().filter(name => item_list[name] && item_list[name].可交易);
+            } else {
+                items = Object.keys(inventory).filter(name => inventory[name] > 0 && item_list[name] && item_list[name].可交易);
+            }
+            if (selectedTradeItem && !items.includes(selectedTradeItem)) selectedTradeItem = null;
+
+            list.replaceChildren();
+            if (!items.length) {
+                list.append(tNode('p', currentTradingTab === 'buy' ? '当前没有可购买的物品。' : '背包中没有可卖出的物品。', 'dialog-empty'));
+            } else {
+                items.forEach(name => {
+                    const item = item_list[name];
+                    const btn = tNode('button', undefined, 'dialog-item');
+                    btn.type = 'button';
+                    btn.dataset.tradeItem = name;
+                    btn.setAttribute('aria-pressed', String(name === selectedTradeItem));
+                    const badge = currentTradingTab === 'buy' ? (item.买入价格 + ' 金') : ('×' + inventory[name]);
+                    btn.append(tNode('span', name, 'dialog-item-name'), tNode('span', badge, 'dialog-item-badge'));
+                    list.append(btn);
+                });
+            }
+
+            detail.replaceChildren(); actions.replaceChildren();
+            if (!selectedTradeItem) {
+                detail.append(tNode('h3', currentTradingTab === 'buy' ? '买入' : '卖出'), tNode('p', '选择一件物品查看详情。'));
+                return;
+            }
+
+            const item = item_list[selectedTradeItem];
+            const isBuy = currentTradingTab === 'buy';
+            detail.append(tNode('h3', selectedTradeItem));
+            const meta = tNode('div', undefined, 'dialog-meta');
+            meta.append(tNode('p', (isBuy ? '买入价格：' : '卖出价格：') + (isBuy ? item.买入价格 : item.卖出价格) + ' 金'));
+            if (!isBuy) meta.append(tNode('p', '持有数量：' + (inventory[selectedTradeItem] || 0)));
+            if (item.可装备) meta.append(tNode('p', '装备类型：' + item.装备类型), tNode('p', '装备属性：' + getEquipEffectText(item)));
+            if (item.可使用) meta.append(tNode('p', '使用效果：' + getItemEffectText(item)));
+            detail.append(meta, tNode('p', item.描述 || '暂无描述。'));
+
+            const actionBtn = tNode('button');
+            actionBtn.type = 'button';
+            if (isBuy) {
+                actionBtn.dataset.tradeAction = 'buy';
+                const canAfford = (playerStats?.金钱 || 0) >= item.买入价格;
+                actionBtn.textContent = canAfford ? '买入' : '金钱不足';
+                actionBtn.disabled = !canAfford;
+            } else {
+                actionBtn.dataset.tradeAction = 'sell';
+                actionBtn.textContent = '卖出';
+            }
+            actions.append(actionBtn);
+        }
 
         // 显示交易界面
         function showTrading(type) {
             closeAllSpecialModals();
             currentTradingType = type;
-            
-            // 设置商店区域标题
-            document.getElementById('shop-title').textContent = type === 'food' ? '伙房食物' : '铁匠铺装备';
-            
-            // 显示当前金钱
-            document.getElementById('trading-money-value').textContent = playerStats.金钱;
-            
-            // 生成用户可卖物品列表
-            const userList = document.getElementById('user-items-list');
-            userList.innerHTML = '';
-            
-            let hasTradeableItems = false;
-            for (const [itemName, quantity] of Object.entries(inventory)) {
-                if (quantity > 0 && item_list[itemName] && item_list[itemName].可交易) {
-                    hasTradeableItems = true;
-                    const item = item_list[itemName];
-                    
-                    const itemRow = document.createElement('div');
-                    itemRow.className = 'trading-item-row';
-                    
-                    itemRow.innerHTML = `
-                        <div class="trading-item-info">
-                            <div class="trading-item-name">${itemName} × ${quantity}</div>
-                            <div class="trading-item-price">售价: ${item.卖出价格}金</div>
-                        </div>
-                        <button class="trading-btn sell-btn" onclick="sellItem('${itemName}')">卖出</button>
-                    `;
-                    
-                    userList.appendChild(itemRow);
-                }
-            }
-            
-            if (!hasTradeableItems) {
-                userList.innerHTML = '<div class="trading-empty">没有可交易的物品</div>';
-            }
-            
-            // 生成商店物品列表
-            const shopList = document.getElementById('shop-items-list');
-            shopList.innerHTML = '';
-
-            let shopItems = [];
-
-            if (type === 'food') {
-                // 伙房出售食物
-                shopItems = ['胡饼', '桂花糕', '烤羊腿'];
-            } else {
-                // 铁匠铺出售装备
-                shopItems = ['制式铁剑', '精钢长剑', '普通弟子服', '铁环软锁甲'];
-            }
-
-            shopItems.forEach(itemName => {
-                const item = item_list[itemName];
-                if (item && item.可交易) {
-                    const itemRow = document.createElement('div');
-                    itemRow.className = 'trading-item-row shop-item-row';
-                    
-                    // 只保留详情按钮，移除购买按钮
-                    itemRow.innerHTML = `
-                        <div class="trading-item-info">
-                            <div class="trading-item-name">${itemName}</div>
-                            <div class="trading-item-price">价格: ${item.买入价格}金</div>
-                        </div>
-                        <button class="trading-btn detail-btn" onclick="showShopItemDetail('${itemName}')">详情</button>
-                    `;
-                    
-                    shopList.appendChild(itemRow);
-                }
-            });
-            
-            const modal = document.getElementById('trading-modal');
-            modal.style.display = 'block';
-            
-            // 延迟一帧后调整位置
-            requestAnimationFrame(() => {
-                fitModalToViewport(modal);
-                bindModalAutoFit(modal);
-            });
+            currentTradingTab = 'buy';
+            selectedTradeItem = null;
+            ensureTradingPanel();
+            renderTrading();
+            tradingPanel.open(document.activeElement);
         }
 
         // 购买物品
         async function buyItem(itemName) {
             const item = item_list[itemName];
-            if (!item || playerStats.金钱 < item.买入价格) return;
-            
+            if (!item || (playerStats?.金钱 || 0) < item.买入价格) return;
             playerStats.金钱 -= item.买入价格;
             inventory[itemName] = (inventory[itemName] || 0) + 1;
-            
             checkAllValueRanges();
             updateAllDisplays();
-            // await saveGameData();
-            
-            // 不显示弹窗，直接刷新交易界面
-            showTrading(currentTradingType);
+            renderTrading();
         }
 
-        // 卖出物品（只保留这一个）
+        // 卖出物品
         async function sellItem(itemName) {
             const item = item_list[itemName];
             if (!item || !inventory[itemName] || inventory[itemName] <= 0) return;
-            
             // 检查是否是已装备的物品
             const isEquipped = Object.values(equipment).includes(itemName);
             if (isEquipped && inventory[itemName] === 1) {
                 showModal('该物品已装备，请先卸下装备再卖出！');
                 return;
             }
-            
             playerStats.金钱 += item.卖出价格;
             inventory[itemName]--;
-            if (inventory[itemName] <= 0) {
-                delete inventory[itemName];
-            }
-            
+            if (inventory[itemName] <= 0) delete inventory[itemName];
             checkAllValueRanges();
             updateAllDisplays();
-            // await saveGameData();
-            
-            // 不显示弹窗，直接刷新交易界面
-            showTrading(currentTradingType);
+            renderTrading();
         }
 
         // 关闭交易弹窗
         function closeTrading() {
-            const modal = document.getElementById('trading-modal');
-            modal.style.display = 'none';
-            modal._unbindFit && modal._unbindFit();
-        }
-
-        // 当前查看的商品
-        let currentShopItem = null;
-
-        // 显示商品详情
-        function showShopItemDetail(itemName) {
-            const item = item_list[itemName];
-            if (!item) return;
-            
-            currentShopItem = itemName;
-            
-            document.getElementById('shop-item-name').textContent = itemName;
-            document.getElementById('shop-item-description').textContent = item.描述;
-            document.getElementById('shop-item-price').textContent = item.买入价格 + ' 金';
-            
-            let infoHTML = '';
-            if (item.可装备) {
-                infoHTML += `<div class="shop-item-stat"><span class="shop-item-stat-label">装备类型：</span>${item.装备类型}</div>`;
-                infoHTML += `<div class="shop-item-stat"><span class="shop-item-stat-label">装备属性：</span>${getEquipEffectText(item)}</div>`;
-            }
-            if (item.可使用) {
-                infoHTML += `<div class="shop-item-stat"><span class="shop-item-stat-label">使用效果：</span>${getItemEffectText(item)}</div>`;
-            }
-            document.getElementById('shop-item-info').innerHTML = infoHTML;
-            
-            // 更新购买按钮状态
-            const buyBtn = document.getElementById('shop-buy-btn');
-            const canAfford = playerStats.金钱 >= item.买入价格;
-            buyBtn.disabled = !canAfford;
-            buyBtn.textContent = canAfford ? '购买' : '金钱不足';
-            
-            const modal = document.getElementById('shop-detail-modal');
-            modal.style.display = 'block';
-            
-            // 将商品详情弹窗定位在交易弹窗的中心
-            const tradingModal = document.getElementById('trading-modal');
-            const tradingRect = tradingModal.getBoundingClientRect();
-            const detailContent = modal.querySelector('.modal-content');
-            
-            // 设置商品详情弹窗的位置
-            detailContent.style.position = 'fixed';
-            detailContent.style.left = tradingRect.left + tradingRect.width / 2 + 'px';
-            detailContent.style.top = tradingRect.top + tradingRect.height / 2 + 'px';
-            detailContent.style.transform = 'translate(-50%, -50%)';
-            
-            // 确保弹窗不超出交易弹窗的范围
-            requestAnimationFrame(() => {
-                const detailRect = detailContent.getBoundingClientRect();
-                
-                // 检查是否超出边界并调整
-                if (detailRect.left < tradingRect.left + 20) {
-                    detailContent.style.left = (tradingRect.left + 20 + detailRect.width / 2) + 'px';
-                }
-                if (detailRect.right > tradingRect.right - 20) {
-                    detailContent.style.left = (tradingRect.right - 20 - detailRect.width / 2) + 'px';
-                }
-                if (detailRect.top < tradingRect.top + 20) {
-                    detailContent.style.top = (tradingRect.top + 20 + detailRect.height / 2) + 'px';
-                }
-                if (detailRect.bottom > tradingRect.bottom - 20) {
-                    detailContent.style.top = (tradingRect.bottom - 20 - detailRect.height / 2) + 'px';
-                }
-            });
-        }
-
-        // 从详情弹窗购买
-        async function buyItemFromDetail() {
-            if (!currentShopItem) return;
-            
-            const item = item_list[currentShopItem];
-            if (!item || playerStats.金钱 < item.买入价格) return;
-            
-            playerStats.金钱 -= item.买入价格;
-            inventory[currentShopItem] = (inventory[currentShopItem] || 0) + 1;
-            
-            checkAllValueRanges();
-            updateAllDisplays();
-            // await saveGameData();
-            
-            showModal(`购买了${currentShopItem}！<br>花费: ${item.买入价格}金`);
-            
-            closeShopDetailModal();
-            showTrading(currentTradingType);
-        }
-
-        // 关闭商品详情弹窗
-        function closeShopDetailModal() {
-            document.getElementById('shop-detail-modal').style.display = 'none';
-            currentShopItem = null;
+            if (tradingPanel) tradingPanel.close();
         }
 
         function showLastUserInput() {
@@ -4890,6 +4629,12 @@ function buildSaveName() {
             }
         }
 
+        // 折叠/展开：音乐音量与 3D画面细节平时折叠，开启对应开关后才显示
+        function gsSetCollapsed(id, visible) {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('collapsed', !visible);
+        }
+
         // 同步后台变量 → 弹窗控件
         function _syncGameSettingsModal() {
             // UI 风格
@@ -4936,6 +4681,7 @@ function buildSaveName() {
             if (bgmSlider)  { bgmSlider.value = Math.round(bgmVol * 100); bgmSlider.disabled = !bgmEnabled; }
             if (bgmDisplay) bgmDisplay.textContent = Math.round(bgmVol * 100) + '%';
             if (bgmHint)    bgmHint.textContent = bgmEnabled ? '开启' : '关闭';
+            gsSetCollapsed('gs-music-detail', bgmEnabled);
 
             // 字体
             const lvl = (typeof textFontLevel !== 'undefined' && textFontLevel) ? textFontLevel : 2;
@@ -5000,6 +4746,7 @@ function buildSaveName() {
                     if (d) d.textContent = _t[k];
                 });
             }
+            gsSetCollapsed('gs-scene3d-detail', _gs3d ? !!_gs3d.enabled : false);
         }
 
         // 游戏设置弹窗内各控件的事件处理
@@ -5097,6 +4844,7 @@ function buildSaveName() {
             const enabled = el.checked;
             document.getElementById('gs-bgm-hint').textContent = enabled ? '开启' : '关闭';
             document.getElementById('gs-bgm-volume').disabled = !enabled;
+            gsSetCollapsed('gs-music-detail', enabled);
             if (typeof bgmManager !== 'undefined') bgmManager.setEnabled(enabled);
         }
 
@@ -5119,6 +4867,7 @@ function buildSaveName() {
         function gsOnScene3dEnable(el) {
             const hint = document.getElementById('gs-scene3d-enable-hint');
             if (hint) hint.textContent = el.checked ? '开' : '关';
+            gsSetCollapsed('gs-scene3d-detail', el.checked);
             const bridge = gsScene3dBridge(); if (bridge) bridge.setPreference({ enabled: el.checked });
         }
         function gsOnScene3dRenderScale(el) {

@@ -6,7 +6,7 @@
     'use strict';
     const ids = new Set([
         'modal', 'difficulty-modal', 'game-settings-modal', 'cheat-modal',
-        'pipeline-log-modal', 'history-summary-modal', 'inventory-modal',
+        'pipeline-log-modal', 'history-summary-modal',
         'equipment-modal', 'item-detail-modal', 'trading-modal', 'shop-detail-modal',
         'bounty-modal', 'load-modal', 'save-list-modal', 'last-input-modal',
         'skill-library-modal', 'skill-equipment-modal', 'music-modal', 'font-modal'

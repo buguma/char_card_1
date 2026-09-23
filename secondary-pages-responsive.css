@@ -74,7 +74,8 @@ body[data-responsive-page="start"] #new-journey-modal :is(.choice-title, .alloc-
 body[data-responsive-page="start"] #new-journey-modal :is(.choice-desc, .alloc-value) { font-size: 15px; }
 body[data-responsive-page="start"] #new-journey-modal .alloc-ops button { width: 40px; height: 40px; }
 body[data-responsive-page="start"] .menu-btn { min-height: 36px; }
-body[data-responsive-page="start"] .menu { max-height: calc(100% - 16px); overflow-y: auto; }
+body[data-responsive-page="start"] .menu { max-height: calc(100% - 16px); overflow-y: auto; overflow-x: hidden; padding: 0 6px; scrollbar-width: none; }
+body[data-responsive-page="start"] .menu::-webkit-scrollbar { width: 0; height: 0; }
 
 /* Farm: remove the page-header fixed positioning from nested headers. */
 body[data-responsive-page="farm"] :is(.exit-dialog, .popover) header {

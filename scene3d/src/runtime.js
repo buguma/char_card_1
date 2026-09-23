@@ -407,6 +407,16 @@ export function mount(container, options = {}) {
       locationLabels?.update()
     }
     wakeWaiters(); schedule()
+    // setSize reallocates the drawing buffer even while a business lock
+    // (regenerate/snapshot restore/modal) has RAF paused, and a paused loop
+    // never repaints it. A mid-lock resize (the landscape soft keyboard
+    // resizes the height-driven viewport; portrait is width-driven and never
+    // changes) would otherwise leave a blank canvas over the dark container
+    // fallback for the whole generation. Repaint one static frame (same
+    // frozen content) whenever no RAF is going to.
+    if (!raf && !canDraw() && eligible() && drawable && renderer && activeRecord) {
+      try { draw(0) } catch (_) { /* The next unlocked frame repaints normally. */ }
+    }
   }
   function resetView() {
     if (!canInteract() || !activeRecord) return false

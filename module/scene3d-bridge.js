@@ -36,7 +36,9 @@
     let page = null, pageAnimation = null;
     const tuningKeys = Object.freeze(['bloom', 'shaft', 'saturation', 'contrast', 'gamma', 'warmth', 'vignette']);
     const defaultTuning = () => ({ bloom: 1, shaft: 0.85, saturation: 1.4, contrast: 1.4, gamma: 0.88, warmth: 0.38, vignette: 0.85 });
-    const defaultPreferences = () => ({ enabled: false, quality: 'balanced', renderScale: 1.5, msaa: 2, shadows: true, atmosphere: true, tuning: defaultTuning() });
+    // Native Capacitor app (APK → phone) defaults renderScale to 2.0; plain web defaults to 1.25.
+    const nativeMobile = () => !!(typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    const defaultPreferences = () => ({ enabled: false, quality: 'balanced', renderScale: (nativeMobile() ? 2 : 1.25), msaa: 2, shadows: true, atmosphere: true, tuning: defaultTuning() });
     const displayed = new Map(), busy = new Set(), errors = [];
     const counters = { notifications: 0, applied: 0, rejectedIntents: 0, mounts: 0, destroys: 0 };
     const clone = value => JSON.parse(JSON.stringify(value));
@@ -401,6 +403,11 @@
             activeView.setRenderEnabled(last.renderEnabled);
             activeView.setInteractionEnabled(last.interactive && !turn);
             let result = await activeView.applyState({ ...clone(last), interactive: last.interactive && !turn });
+            // Self-heal once: navigation dedupes a failed epoch:scene key forever,
+            // so a one-off failure (e.g. shader compile under landscape GPU
+            // pressure right after a regenerate) would otherwise strand the scene
+            // on the 2D fallback with no visible retry path.
+            if (!request.retry && current() && result?.status === 'degraded') result = await activeView.retry();
             if (request.retry && current() && result?.status === 'degraded') result = await activeView.retry();
             counters.applied++;
             if (activeView !== view || !current() || result?.epoch !== epoch || result.revision !== revision || result.sceneId !== last.sceneId) return;
@@ -609,15 +616,17 @@
         const active = document.querySelector('#main-viewport > .scene.active');
         const special = active && ['player-stats-scene', 'relationships-scene'].includes(active.id);
         const target = currentLocation() === 'tianshanpai' ? 'map' : currentLocation();
-        // Restore business state immediately, but retain the last rendered scene
-        // throughout generation (including main -> previous room rollback). The new
-        // epoch must reach the renderer only after rendering is unlocked in apply().
-        // Host life/epoch still advance now, rejecting every stale load and intent.
+        // A page turn in flight (turn !== null) must not force an invalidate+hide:
+        // the rendered scene is already applied and its canvas stays readable if we
+        // simply cancel the covering/revealing sheet and hold the last frame. The
+        // old !turn clause here was turning a routine mid-turn regenerate into a
+        // blank viewport on phones.
         const keepFrame = reason === 'snapshot-restored' && preferences?.enabled && currentMode() === 0
-            && Object.hasOwn(locations, target) && view && !turn && readyScene
+            && Object.hasOwn(locations, target) && view && readyScene
             && (restoreHold || readyScene === locations[active?.id?.replace(/-scene$/, '')])
             && viewport?.dataset.scene3dReady === 'true' && !root.hidden;
         if (keepFrame) {
+            abortTurn();
             life++; restoreHold = true;
             stopDrawing(false); closeMenu();
             if (notice) notice.hidden = true;
@@ -661,10 +670,10 @@
     function openSettings() {
         if (!started) return;
         closeMenu(); stopDrawing(false);
-        // 3D settings live inside the host's game-settings modal as a tab.
+        // 3D settings live inside the host's game-settings modal, merged into the 通用设置 (switches) panel.
         if (typeof showGameSettings === 'function') {
             showGameSettings();
-            if (typeof gsSelectTab === 'function') gsSelectTab('scene3d');
+            if (typeof gsSelectTab === 'function') gsSelectTab('switches');
         }
         notify('settings-open');
     }
@@ -692,7 +701,7 @@
             if (stored) {
                 preferences.enabled = stored.enabled === true;
                 if (stored.schema === PREF_SCHEMA && ['low', 'balanced'].includes(stored.quality)) preferences.quality = stored.quality;
-                if (stored.renderScale === null || [1, 1.25, 1.5, 2].includes(stored.renderScale)) preferences.renderScale = stored.renderScale;
+                if ([1, 1.25, 1.5, 2].includes(stored.renderScale)) preferences.renderScale = stored.renderScale;
                 if ([2, 4].includes(stored.msaa)) preferences.msaa = stored.msaa;
                 if (typeof stored.shadows === 'boolean') preferences.shadows = stored.shadows;
                 if (typeof stored.atmosphere === 'boolean') preferences.atmosphere = stored.atmosphere;

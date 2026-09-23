@@ -1,0 +1,60 @@
+/* Landscape-only map/HUD feedback layer. Sizing follows the rendered game
+   viewport instead of the browser's full width. Existing theme assets, colors
+   and location business handlers remain untouched. */
+body.layout-landscape #main-viewport,
+body.layout-landscape #main-viewport #map-scene {
+    container-type: size;
+}
+
+/* The clickable .location remains the hit area. At the 844x390 split layout,
+   2.5cqw resolves against the roughly 561px map to about 14px. */
+body.layout-landscape #main-viewport #map-scene .location {
+    width: clamp(48px, 9.5cqw, 180px) !important;
+    min-height: clamp(24px, 3.8cqw, 44px);
+    aspect-ratio: 2.5;
+    padding-inline: clamp(3px, .55cqw, 8px) !important;
+    font-size: clamp(12px, 2.5cqw, 28px) !important;
+    line-height: 1.1;
+}
+
+body.layout-landscape #main-viewport #map-scene .location > .location-label-text {
+    /* Explicitly reset both inherited/stacked effects on the real text node.
+       One crisp keyline preserves the established white-on-black label style. */
+    text-shadow: none !important;
+    -webkit-text-stroke: clamp(.45px, .11cqw, 1px) #000 !important;
+    paint-order: stroke fill;
+}
+
+body.layout-landscape #main-viewport #map-scene .location > .location-label-divider {
+    margin-block: clamp(2px, .55cqw, 6px);
+    border-top-width: clamp(1px, .16cqw, 2px);
+}
+
+body.layout-landscape #main-viewport #map-scene .location > .location-people {
+    gap: clamp(2px, .35cqw, 4px);
+}
+
+body.layout-landscape #main-viewport #map-scene .location > .location-people > .people-dot {
+    width: clamp(6px, .9cqw, 12px);
+    height: clamp(6px, .9cqw, 12px);
+}
+
+/* Keep every scene HUD on one landscape scale. These rules only change size
+   and spacing; each theme continues to own its imagery and presentation. */
+body.layout-landscape #main-viewport .scene .status-display {
+    font-size: clamp(11px, 2.2cqw, 22px) !important;
+    gap: clamp(6px, 1.7cqw, 20px);
+    padding-inline: clamp(8px, 1.7cqw, 20px);
+}
+body.layout-landscape #main-viewport .scene .status-display .date-display {
+    font-size: clamp(12px, 2.5cqw, 26px) !important;
+}
+body.layout-landscape #main-viewport .scene .status-display .mood-display,
+body.layout-landscape #main-viewport .scene .status-display .mood-text,
+body.layout-landscape #main-viewport .scene .status-display .action-points-display {
+    font-size: clamp(11px, 2.2cqw, 22px) !important;
+}
+body.layout-landscape #main-viewport .scene .status-display > div:not(:last-child) {
+    padding-right: clamp(8px, 1.7cqw, 20px);
+    margin-right: clamp(8px, 1.7cqw, 20px);
+}

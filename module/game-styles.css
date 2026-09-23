@@ -3897,6 +3897,31 @@ body.ui-style-flat .cfg-footer { border-top-color: #e0e0e0; }
     color: #888;
 }
 
+/* 通用设置（合并正文字体/音乐/3D画面）的分组小标题 */
+.gs-subhead {
+    margin: 18px 0 0;
+    padding: 4px 0 4px 8px;
+    border-left: 3px solid #4ecdc4;
+    font-size: 15px;
+    font-weight: bold;
+    color: #2c2c2c;
+}
+.gs-subhead:first-of-type { margin-top: 6px; }
+
+/* 折叠区：音乐音量 / 3D画面细节，开启对应开关后才显示 */
+.gs-collapsible { display: block; }
+.gs-collapsible.collapsed { display: none !important; }
+
+/* 正文字体滑杆行（小 — 滑杆 — 大） */
+.gs-font-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1 1 auto;
+    min-width: 160px;
+}
+.gs-font-row .gs-range { flex: 1 1 auto; }
+
 /* 底部按钮区 */
 .gs-footer {
     flex-shrink: 0;

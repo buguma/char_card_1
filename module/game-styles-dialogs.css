@@ -228,6 +228,10 @@ body .npc-selection-overlay .npc-selection-option-reward { font-size: 12px !impo
 body #relationships-scene .relationships-container { top: 52px; width: 96%; max-height: calc(100% - 60px); padding: 8px; box-sizing: border-box; }
 body #relationships-scene .back-btn { font-size: 14px !important; min-height: 36px; padding: 6px 12px !important; }
 body #relationships-scene .relationship-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+body.layout-landscape #relationships-scene .relationship-grid { grid-template-columns: repeat(3, 1fr) !important; }
+@media (max-width: 900px) {
+    body.layout-landscape #relationships-scene .relationship-name { font-size: 13px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
 body #relationships-scene .relationship-card { min-width: 0; padding: 10px !important; }
 body #relationships-scene .relationship-name { font-size: 16px !important; }
 body #relationships-scene :is(.relationship-value, .relationship-controls, .relationship-controls button) { font-size: 14px !important; }
@@ -245,7 +249,7 @@ body #relationships-scene .relationship-controls button { min-height: 36px; padd
     body .game-dialog .gs-tab { flex: 1 1 100px; }
     body .game-dialog .skill-modal-header { flex-wrap: wrap; gap: 4px; }
     body .game-dialog .skill-memory-summary { text-align: left; }
-    body #relationships-scene .relationship-grid { grid-template-columns: minmax(0, 1fr); }
+    body #relationships-scene .relationship-grid { grid-template-columns: repeat(3, 1fr); }
 }
 /* Four compact equipment slots remain two columns on normal phones; effects
    follow as a separate full-width block, not another tiny grid cell. */

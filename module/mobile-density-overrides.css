@@ -2,7 +2,7 @@
 @media (max-width: 600px) {
     /* Relationships: show several NPCs per row in portrait too. */
     body #relationships-scene .relationships-container { width: 98%; top: 42px; padding: 5px; }
-    body #relationships-scene .relationship-grid { grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)) !important; gap: 6px; }
+    body #relationships-scene .relationship-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 6px; }
     body #relationships-scene .relationship-card { border-radius: 6px; }
     body #relationships-scene .relationship-portrait { max-height: 92px; }
     body #relationships-scene .relationship-portrait img { width: 100%; height: 92px; object-fit: cover; object-position: top center; }

@@ -10,6 +10,10 @@ body #main-viewport #relationships-scene .relationship-value {
     body #main-viewport #relationships-scene .relationship-info { padding-inline: 0 !important; }
     body #main-viewport #relationships-scene .relationship-value { font-size: 11px !important; }
 }
+/* 手机/小平板横屏：4 列卡片窄，好感度数值下调一档避免溢出 */
+@media (max-width: 900px) {
+    body.layout-landscape #main-viewport #relationships-scene .relationship-value { font-size: 11px !important; }
+}
 body #main-viewport #relationships-scene .relationship-value-number { display: inline-block; font: inherit; font-variant-numeric: tabular-nums; }
 body #relationships-scene .relationship-controls { justify-content: center; }
 body #relationships-scene .relationship-card:hover { transform: none; }

@@ -1,0 +1,234 @@
+/* ============================================================================
+ * dialog-panel.css — 通用「视窗内三栏面板」弹窗样式
+ *
+ * 与 module/inventory-panel.css 同源同法，供 查看技能 / 技能习得 / 交易 三类弹窗复用。
+ * 分层：基座（几何/语义）→ body.ui-style-flat（扁平皮肤）→ body.ui-style-ancient（古风皮肤）。
+ * 皮肤只换皮，绝不改几何（列宽、滚动、字体 clamp 保持不变）。
+ *
+ * 结构约定（每个面板）：
+ *   <div id="…" class="dialog-panel" style="display:none">
+ *     <section class="dialog-panel-shell" role="dialog" aria-modal="true" aria-labelledby="…">
+ *       <header class="dialog-panel-header"><h2>标题</h2><button type="button" data-dialog-close>退出</button></header>
+ *       [<div class="dialog-memorybar">…</div>]                          （可选：记忆点槽）
+ *       <div class="dialog-panel-columns">
+ *         <nav class="dialog-tabs">…</nav>                               （左：选项卡）
+ *         <div class="dialog-list">…</div>                               （中：列表）
+ *         <section class="dialog-detail">…</section>                     （右：详情+操作）
+ *       </div>
+ *     </section>
+ *   </div>
+ * ========================================================================== */
+
+/* ---------- 基座：几何与语义（皮肤无关） ---------- */
+.dialog-panel {
+    position: absolute;
+    z-index: 2500;
+    margin: 0;
+    padding: 0;
+    max-width: none;
+    max-height: none;
+    transform: none;
+    overflow: hidden;
+    box-sizing: border-box;
+    color: #302d28;
+    background: #f5f0e4;
+    font: var(--panel-font, 14px)/1.55 var(--font-serif, 'Microsoft YaHei', serif);
+    --panel-line: #716659;
+    --panel-selected: #e1d6bf;
+}
+.dialog-panel * { box-sizing: border-box; }
+.dialog-panel .dialog-panel-shell {
+    height: 100%; width: 100%; min-height: 0;
+    display: flex; flex-direction: column;
+    border: 2px solid #4f473c;
+    padding: .65em;
+    background: linear-gradient(#faf7eee8, #faf7eedb), url('../assets/image/static/文字框or弹窗底部的水墨背景建议加透明度使用-fade.png') center bottom / 100% auto no-repeat;
+}
+.dialog-panel .dialog-panel-header {
+    flex: 0 0 auto;
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    gap: .5em; padding: 0 0 .6em; min-width: 0;
+}
+.dialog-panel h2 {
+    grid-column: 2; font-family: inherit; font-size: 1.65em; font-weight: bold;
+    line-height: 1.3; margin: 0; letter-spacing: .15em; text-align: center;
+}
+.dialog-panel [data-dialog-close] { grid-column: 3; justify-self: end; padding: .3em .75em; }
+.dialog-panel .dialog-panel-money { grid-column: 1; justify-self: start; align-self: center; font-size: .95em; font-weight: bold; white-space: nowrap; }
+.dialog-panel button {
+    appearance: none; font: inherit; color: inherit; cursor: pointer;
+    border: 1px solid var(--panel-line); border-radius: 2px;
+    background: #faf7ef; box-shadow: none; margin: 0;
+    min-width: 0; touch-action: manipulation;
+}
+.dialog-panel button:focus-visible { outline: 2px solid #9d3e2f; outline-offset: -3px; }
+.dialog-panel button:hover { background-color: var(--panel-selected); }
+.dialog-panel button:disabled { cursor: wait; opacity: .6; }
+
+/* 记忆点槽（可选，插在 header 与 columns 之间） */
+.dialog-panel .dialog-memorybar {
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: .6em;
+    padding: 0 0 .6em; min-width: 0;
+}
+.dialog-panel .dialog-memorybar .dialog-memory-label { flex-shrink: 0; font-size: .92em; font-weight: bold; }
+.dialog-panel .dialog-memorybar .dialog-memory-track {
+    flex: 1 1 auto; min-width: 0; height: 1em;
+    border: 1px solid var(--panel-line); border-radius: 2px;
+    background: #efe8d8; overflow: hidden;
+}
+.dialog-panel .dialog-memorybar .dialog-memory-fill {
+    height: 100%; width: 0%;
+    background: #8a7d68; transition: width .18s ease;
+}
+.dialog-panel .dialog-memorybar .dialog-memory-text {
+    flex-shrink: 0; font-size: .92em; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+/* 三栏 */
+.dialog-panel .dialog-panel-columns {
+    flex: 1 1 auto; min-height: 0;
+    display: grid; grid-template-columns: 17% 40% 43%;
+    border: 1px solid var(--panel-line); overflow: hidden;
+}
+.dialog-panel .dialog-tabs {
+    min-height: 0; min-width: 0; overflow: auto;
+    display: flex; flex-direction: column; gap: .45em; padding: .5em .35em;
+    border-right: 1px solid var(--panel-line);
+}
+.dialog-panel .dialog-tabs button { flex: 0 0 auto; padding: .45em .3em; white-space: nowrap; }
+.dialog-panel [aria-pressed='true'] {
+    background: var(--panel-selected); border-color: #453a2e; font-weight: bold;
+    box-shadow: inset .22em 0 #554737;
+}
+.dialog-panel .dialog-list {
+    min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain;
+    padding: .6em; border-right: 1px solid var(--panel-line);
+}
+.dialog-panel .dialog-item {
+    display: flex; align-items: center; justify-content: space-between; gap: .45em;
+    width: 100%; padding: .85em .6em; margin-bottom: .45em;
+    text-align: left; overflow-wrap: anywhere; border-color: transparent; background: transparent;
+}
+.dialog-panel .dialog-item .dialog-item-badge {
+    flex-shrink: 0; font-size: .88em; font-variant-numeric: tabular-nums;
+}
+.dialog-panel .dialog-item .dialog-item-name {
+    flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere;
+}
+.dialog-panel .dialog-detail {
+    min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: .7em;
+}
+.dialog-panel .dialog-detail-body { flex: 1; min-height: 0; overflow: auto; overflow-wrap: anywhere; overscroll-behavior: contain; }
+.dialog-panel .dialog-detail h3 {
+    font-family: inherit; font-size: 1.45em; font-weight: bold; line-height: 1.4;
+    margin: 0 0 .6em; padding-bottom: .45em; border-bottom: 1px solid var(--panel-line);
+}
+.dialog-panel .dialog-detail p { margin: 0 0 .7em; font-size: 1em; line-height: 1.65; }
+.dialog-panel .dialog-detail .dialog-meta { border-bottom: 1px solid var(--panel-line); padding-bottom: .2em; margin-bottom: .8em; }
+.dialog-panel .dialog-detail-actions { flex-shrink: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: .5em; }
+.dialog-panel .dialog-detail-actions:not(:empty) { padding-top: .65em; }
+.dialog-panel .dialog-detail-actions button { min-width: 65%; padding: .5em .8em; }
+.dialog-panel .dialog-empty { opacity: .7; padding: .8em .2em; }
+.dialog-panel .dialog-req { display: block; padding: .15em .3em; margin: .15em 0; border-radius: 2px; }
+.dialog-panel .dialog-req.ok { color: #2f6b3a; }
+.dialog-panel .dialog-req.failed { color: #b3261e; font-weight: bold; }
+
+/* ---------- 扁平皮肤 ---------- */
+body.ui-style-flat .dialog-panel { background: #f4f7fb; color: #253449; font-family: 'Microsoft YaHei', sans-serif; --panel-line: #b3c1d3; --panel-selected: #dceaff; }
+body.ui-style-flat .dialog-panel .dialog-panel-shell { background: #f4f7fb; border-color: #92a7c1; }
+body.ui-style-flat .dialog-panel button { background: #fff; }
+body.ui-style-flat .dialog-panel [aria-pressed='true'] { background: #dceaff; border-color: #567fae; box-shadow: inset .22em 0 #416f9f; }
+body.ui-style-flat .dialog-panel .dialog-item:not([aria-pressed='true']) { background: transparent; }
+
+/* ---------- 古风皮肤（body.ui-style-ancient）：只重绘皮肤，不动几何 ---------- */
+
+/* 1. 枯笔方框 边框-fill：外壳 10px + 三个内区 6px；columns 退掉直角线避免双线。 */
+body.ui-style-ancient .dialog-panel .dialog-panel-shell {
+    border: 10px solid transparent !important;
+    border-image: url('../assets/image/static/边框-fill.png') 4% fill / 10px / 1px stretch !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background-color: transparent !important;
+    background-image: none !important;
+}
+body.ui-style-ancient .dialog-panel .dialog-panel-columns { border: none !important; }
+body.ui-style-ancient .dialog-panel .dialog-tabs,
+body.ui-style-ancient .dialog-panel .dialog-list,
+body.ui-style-ancient .dialog-panel .dialog-detail {
+    border: 6px solid transparent !important;
+    border-image: url('../assets/image/static/边框-fill.png') 4% fill / 6px / 1px stretch !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background-color: transparent !important;
+    background-image: none !important;
+}
+/* 记忆点槽内边退掉直角线，改用简单纸色轨道 */
+body.ui-style-ancient .dialog-panel .dialog-memorybar .dialog-memory-track {
+    border-color: var(--ink-black, #1a1a1a);
+    background: var(--paper-base, #f4f0e6);
+}
+body.ui-style-ancient .dialog-panel .dialog-memorybar .dialog-memory-fill {
+    background: var(--ink-black, #1a1a1a);
+}
+
+/* 2. 标题：水墨笔触2 墨迹 + 纸色反白字 + 黑描边（与其他古风弹窗标题牌一致）。 */
+body.ui-style-ancient .dialog-panel h2 {
+    display: inline-block;
+    border-bottom: none;
+    background-color: var(--paper-base, #f4f0e6);
+    background-image: url('../assets/image/static/水墨笔触2.png');
+    background-size: contain;
+    background-position: left center;
+    background-repeat: no-repeat;
+    background-blend-mode: multiply;
+    color: var(--paper-base, #f4f0e6) !important;
+    padding: 5px 2.4em 9px 1.1em;
+    letter-spacing: 3px;
+    transform: rotate(-1.6deg);
+    -webkit-text-stroke: 1.5px var(--ink-black, #1a1a1a);
+    paint-order: stroke fill;
+    text-shadow: 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+/* 3. 框5-短 按钮（选项卡 / 退出 / 操作）：整图不拉伸——background-size 100% auto 保比例。 */
+body.ui-style-ancient .dialog-panel .dialog-tabs button,
+body.ui-style-ancient .dialog-panel [data-dialog-close],
+body.ui-style-ancient .dialog-panel .dialog-detail-actions button {
+    border: none !important;
+    border-radius: 0 !important;
+    background-color: transparent !important;
+    background-image: url('../assets/image/static/框5-短.png') !important;
+    background-size: 100% auto !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    color: var(--ink-black, #1a1a1a) !important;
+    box-shadow: none !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+body.ui-style-ancient .dialog-panel .dialog-tabs button { aspect-ratio: 2.46 / 1; min-height: 2.2em; }
+body.ui-style-ancient .dialog-panel [data-dialog-close] { aspect-ratio: 2.46 / 1; min-width: 5.2em; min-height: 2.2em; padding: .3em .9em; }
+body.ui-style-ancient .dialog-panel .dialog-detail-actions button { aspect-ratio: 2.46 / 1; min-height: 2.4em; }
+
+/* 选中选项卡：inset 浅罩（与其他 border-image fill 选中态一致）。 */
+body.ui-style-ancient .dialog-panel .dialog-tabs button[aria-pressed='true'] {
+    box-shadow: inset 0 0 0 999px rgba(44, 44, 44, 0.12) !important;
+    font-weight: bold;
+}
+
+/* 4. 选中物品：水墨笔触1 墨团 + 白字黑边（覆盖基线选中底色与左竖条）。 */
+body.ui-style-ancient .dialog-panel .dialog-item[aria-pressed='true'] {
+    background-color: transparent !important;
+    background-image: url('../assets/image/static/水墨笔触1.png') !important;
+    background-size: 100% 100% !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    color: #ffffff !important;
+    text-shadow: 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000, 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000 !important;
+}

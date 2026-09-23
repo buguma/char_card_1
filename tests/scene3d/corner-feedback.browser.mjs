@@ -61,10 +61,11 @@ try {
         const status = viewport?.querySelector('.status-display');
         const reset = viewport?.querySelector('.scene3d-reset');
         const gear = document.getElementById('viewport-dock-gear');
-        if (!viewport || !status || !reset || !gear) throw Error('Corner feedback controls/status missing');
+        const controlBtn = viewport?.querySelector('#viewport-dock-menu .control-btn');
+        if (!viewport || !status || !reset || !gear || !controlBtn) throw Error('Corner feedback controls/status missing');
         const vp = viewport.getBoundingClientRect();
         const contentTop = vp.top + viewport.clientTop;
-        const sr = status.getBoundingClientRect(), rr = reset.getBoundingClientRect(), gr = gear.getBoundingClientRect();
+        const sr = status.getBoundingClientRect(), rr = reset.getBoundingClientRect(), gr = gear.getBoundingClientRect(), cr = controlBtn.getBoundingClientRect();
         const rs = getComputedStyle(reset), gs = getComputedStyle(gear), ss = getComputedStyle(status);
         const center = node => { const r = node.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { hit: hit === node || node.contains(hit), tag: hit?.tagName, id: hit?.id, className: hit?.className }; };
         return {
@@ -74,7 +75,8 @@ try {
           reset: { left: rr.left, right: rr.right, top: rr.top, bottom: rr.bottom, width: rr.width, height: rr.height, rightGap: vp.right - rr.right, bottomGap: vp.bottom - rr.bottom, hit: center(reset) },
           gear: { left: gr.left, right: gr.right, top: gr.top, bottom: gr.bottom, width: gr.width, height: gr.height, rightGap: vp.right - gr.right, bottomGap: vp.bottom - gr.bottom, hit: center(gear) },
           resetStyle: { background: rs.backgroundColor, radius: rs.borderRadius },
-          gearStyle: { background: gs.backgroundColor, radius: gs.borderRadius }
+          gearStyle: { background: gs.backgroundColor, radius: gs.borderRadius },
+          controlBtn: { width: cr.width, height: cr.height }
         };
       });
       const { reset, gear, status, activeScene } = record.layout;
@@ -82,6 +84,7 @@ try {
       assert.equal(activeScene.exists, true, `${testCase.label}: active inner scene missing`);
       assert.equal(activeScene.paddingTop, '0px', `${testCase.label}: active inner scene padding-top must be 0`);
       assert.ok(Math.abs(reset.width - gear.width) < 0.1 && Math.abs(reset.height - gear.height) < 0.1, `${testCase.label}: reset and gear sizes differ`);
+      assert.ok(Math.abs(reset.width - 0.8 * record.layout.controlBtn.height) < 0.75, `${testCase.label}: corner size ${reset.width.toFixed(2)}px != 80% of control-btn height ${record.layout.controlBtn.height.toFixed(2)}px`);
       assert.ok(Math.abs(reset.rightGap - gear.rightGap) < 0.1, `${testCase.label}: reset and gear right edges differ`);
       assert.ok(Math.abs((gear.top - reset.bottom) - 10) < 0.2, `${testCase.label}: corner controls gap is ${(gear.top - reset.bottom).toFixed(2)}px, expected 10px`);
       assert.equal(reset.hit.hit, true, `${testCase.label}: reset center is not hit by reset`);

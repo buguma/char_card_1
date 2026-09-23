@@ -55,7 +55,9 @@ try {
    results.push(rendererRecord);
    await writeFile(path.join(output,`${label}-renderer.json`),JSON.stringify(rendererRecord,null,2));
    await page.screenshot({path:path.join(output,`${label}-scene-evidence.png`)});
-   const dialogs=[['inventory','showInventory','inventory-modal'],['equipment','showEquipment','equipment-modal'],['difficulty','showDifficultySettings','difficulty-modal'],['cheat','showCheatMode','cheat-modal'],['settings','showGameSettings','game-settings-modal'],['load','showLoadModal','load-modal'],['history','showHistorySummary','history-summary-modal'],['config','showConfigModal','api-config-modal'],['music','showMusicSettings','music-modal'],['font','showFontSettings','font-modal'],['skills','showSkillLibrary','skill-library-modal'],['skill-equipment','showSkillEquipment','skill-equipment-modal'],['trade','showTrading','trading-modal','food'],['logs','showPipelineLog','pipeline-log-modal'],['last-input','showLastUserInput','last-input-modal']];
+   // Inventory's absolute viewport panel is covered separately by inventory.browser.mjs;
+   // the equipment viewport panel likewise by equipment-panel.browser.mjs.
+   const dialogs=[['difficulty','showDifficultySettings','difficulty-modal'],['cheat','showCheatMode','cheat-modal'],['settings','showGameSettings','game-settings-modal'],['load','showLoadModal','load-modal'],['history','showHistorySummary','history-summary-modal'],['config','showConfigModal','api-config-modal'],['music','showMusicSettings','music-modal'],['font','showFontSettings','font-modal'],['logs','showPipelineLog','pipeline-log-modal'],['last-input','showLastUserInput','last-input-modal']];
    for(const [name,fn,id,arg] of dialogs) {
     const record={label,name,id};
     try {
@@ -80,7 +82,7 @@ try {
      record.scrollCheck=await page.evaluate(id=>{const m=document.getElementById(id),body=m?.querySelector('.game-dialog-body,.cfg-scroll-body'),footer=m?.querySelector('.game-dialog-footer,.cfg-footer');if(!body||!footer)return {pass:false};const before=footer.getBoundingClientRect().bottom;body.scrollTop=body.scrollHeight;const scrolled=body.scrollTop,after=footer.getBoundingClientRect().bottom;body.scrollTop=0;return {pass:Math.abs(after-before)<1,scrolled,scrollRange:body.scrollHeight-body.clientHeight,before,after};},id);
       record.pass=record.pass&&record.scrollCheck.pass;
       await page.screenshot({path:path.join(output,`${label}-${name}.png`)});
-      if(['history','skills','skill-equipment'].includes(name)) {
+      if(['history'].includes(name)) {
        record.longContent=await page.evaluate(({id,name})=>{
         const modal=document.getElementById(id),body=modal.querySelector('.game-dialog-body');body.scrollTop=body.scrollHeight;
         let lastRect,text,count;
@@ -94,7 +96,7 @@ try {
        await page.screenshot({path:path.join(output,`${label}-${name}-last.png`)});
        await page.$eval(`#${id} .game-dialog-body`,e=>{e.scrollTop=0;});
       }
-      if(['inventory','skills','settings'].includes(name)) {
+      if(['settings'].includes(name)) {
        const before=await page.evaluate(()=>JSON.stringify({actionPoints,currentWeek,playerStats,npcFavorability,inventory,equipment,learnedSkills,equippedSkills}));
        if(name==='inventory') {
         const lastItem=await page.$eval('#inventory-grid .inventory-item:last-child',e=>{e.scrollIntoView({block:'end'});return e.querySelector('.item-name').textContent;});
@@ -107,13 +109,9 @@ try {
         const detailClosed=await page.$eval('#item-detail-modal',e=>getComputedStyle(e).display==='none');
         await page.click('#inventory-modal .game-dialog-footer button');
         record.interaction={action:'real scroll last item -> detail -> close detail -> close inventory',lastItem,tailVisible,detail,detailClosed,pass:tailVisible&&detail.visible&&detail.within&&detail.name===lastItem&&detailClosed&&await page.$eval('#inventory-modal',e=>getComputedStyle(e).display==='none')};
-       } else if(name==='skills') {
-        const target=await page.$eval('#skill-library-filters button:nth-child(2)',e=>e.textContent.trim());
-        await page.click('#skill-library-filters button:nth-child(2)');
-        record.interaction=await page.evaluate(target=>({action:'real click skill category',target,active:document.querySelector('#skill-library-filters .active')?.textContent.trim(),cards:document.querySelectorAll('#skill-library-list .skill-card').length,pass:document.querySelector('#skill-library-filters .active')?.textContent.trim()===target}),target);
        } else {
-        await page.click('#gs-tabs [data-tab="music"]');
-        record.interaction=await page.evaluate(()=>({action:'real click settings music tab',pass:document.querySelector('#gs-tabs [data-tab="music"]').classList.contains('active')&&document.getElementById('gs-panel-music').classList.contains('active')&&getComputedStyle(document.getElementById('gs-panel-music')).display!=='none'}));
+        await page.click('#gs-tabs [data-tab="switches"]');
+        record.interaction=await page.evaluate(()=>({action:'real click settings general tab',pass:document.querySelector('#gs-tabs [data-tab="switches"]').classList.contains('active')&&document.getElementById('gs-panel-switches').classList.contains('active')&&getComputedStyle(document.getElementById('gs-panel-switches')).display!=='none'&&document.querySelectorAll('#gs-panel-switches .gs-subhead').length>=3}));
        }
        record.interaction.businessUnchanged=before===await page.evaluate(()=>JSON.stringify({actionPoints,currentWeek,playerStats,npcFavorability,inventory,equipment,learnedSkills,equippedSkills}));
        record.pass=record.pass&&record.interaction.pass&&record.interaction.businessUnchanged;

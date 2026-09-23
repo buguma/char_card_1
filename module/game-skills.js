@@ -1,26 +1,39 @@
 /**
- * game-skills.js - 技能学习与装备界面
+ * game-skills.js - 技能学习与装备界面（背包式三栏面板）
  *
  * 负责：
  * 1. 在藏经阁注入“技能习得”按钮
- * 2. 在属性查看下拉菜单注入“查看技能”按钮
- * 3. 动态创建技能学习/装备弹窗
+ * 2. 在属性查看下拉菜单注入“查看技能”按钮（静态 HTML 在 index.html）
+ * 3. 创建两个视窗内三栏面板：技能习得（藏经阁）、技能管理（查看技能）
  * 4. 处理技能学习、装备、卸下与界面渲染
  *
  * 依赖：
- * - skillList
- * - learnedSkills / equippedSkills / playerStats
- * - getSkillLevelData / getUsedMemorySlots / getMaxMemorySlots / checkSkillRequirements
- * - showModal / showConfirmModal / closeAllSpecialModals / fitModalToViewport / bindModalAutoFit
- * - saveGameData / updateAllDisplays / toggleDropdown
+ * - skillList / learnedSkills / equippedSkills / playerStats / npcs
+ * - getSkillLevelData / getUsedMemorySlots / getMaxMemorySlots / getSkillMemorySlots / checkSkillRequirements
+ * - DialogPanel（module/dialog-panel.js）
+ * - showModal / showConfirmModal / closeAllSpecialModals / toggleDropdown
+ * - saveGameData / checkAllValueRanges / updateAllDisplays
  */
 
-let currentSkillLibraryFilter = '全部';
+let currentSkillLibraryTab = '攻击';
+let currentSkillEquipTab = 'equipped';
+let selectedLibrarySkill = null;
+let selectedEquipSkill = null;
+
+const skillEquipPanel = { modal: null, api: null };
+const skillLibraryPanel = { modal: null, api: null };
 
 function initSkillUi() {
     injectSkillEntryButtons();
     ensureSkillModals();
     exposeSkillFunctions();
+}
+
+function node(tag, text, className) {
+    const el = document.createElement(tag);
+    if (text !== undefined && text !== null) el.textContent = text;
+    if (className) el.className = className;
+    return el;
 }
 
 function injectSkillEntryButtons() {
@@ -39,55 +52,69 @@ function injectSkillEntryButtons() {
 function ensureSkillModals() {
     if (!document.getElementById('skill-library-modal')) {
         document.body.insertAdjacentHTML('beforeend', `
-            <div id="skill-library-modal" class="modal viewport-overlay">
-                <div class="modal-content skill-library-content">
-                    <div class="skill-modal-header">
-                        <div>
-                            <h3>技能习得</h3>
-                            <div class="skill-modal-subtitle">浏览功法、查看前置条件并学习新等级。</div>
-                        </div>
-                        <div class="skill-memory-summary" id="skill-library-memory-summary"></div>
+            <div id="skill-library-modal" class="dialog-panel" style="display:none">
+                <section class="dialog-panel-shell" role="dialog" aria-modal="true" aria-labelledby="skill-library-title">
+                    <header class="dialog-panel-header">
+                        <h2 id="skill-library-title">技能习得</h2>
+                        <button type="button" data-dialog-close>退出</button>
+                    </header>
+                    <div class="dialog-panel-columns">
+                        <nav class="dialog-tabs" aria-label="技能类型">
+                            <button type="button" data-dialog-tab="攻击">攻击</button>
+                            <button type="button" data-dialog-tab="防御">防御</button>
+                            <button type="button" data-dialog-tab="辅助">辅助</button>
+                            <button type="button" data-dialog-tab="控制">控制</button>
+                        </nav>
+                        <div id="skill-library-list" class="dialog-list" aria-label="可学技能"></div>
+                        <section class="dialog-detail" aria-label="技能详情">
+                            <div id="skill-library-detail" class="dialog-detail-body" aria-live="polite"></div>
+                            <div id="skill-library-actions" class="dialog-detail-actions"></div>
+                        </section>
                     </div>
-                    <div class="skill-filter-row" id="skill-library-filters"></div>
-                    <div class="skill-list-container" id="skill-library-list"></div>
-                    <div class="modal-buttons">
-                        <button class="modal-btn cancel" onclick="closeSkillLibraryModal()">关闭</button>
-                    </div>
-                </div>
+                </section>
             </div>
         `);
     }
 
     if (!document.getElementById('skill-equipment-modal')) {
         document.body.insertAdjacentHTML('beforeend', `
-            <div id="skill-equipment-modal" class="modal viewport-overlay">
-                <div class="modal-content skill-equip-content">
-                    <div class="skill-modal-header">
-                        <div>
-                            <h3>技能管理</h3>
-                            <div class="skill-modal-subtitle">调整已学技能的装备等级，受记忆点上限约束。</div>
-                        </div>
-                        <div class="skill-memory-summary" id="skill-equipment-memory-summary"></div>
+            <div id="skill-equipment-modal" class="dialog-panel" style="display:none">
+                <section class="dialog-panel-shell" role="dialog" aria-modal="true" aria-labelledby="skill-equipment-title">
+                    <header class="dialog-panel-header">
+                        <h2 id="skill-equipment-title">技能管理</h2>
+                        <button type="button" data-dialog-close>退出</button>
+                    </header>
+                    <div class="dialog-memorybar" aria-label="记忆点占用">
+                        <span class="dialog-memory-label">记忆点</span>
+                        <div class="dialog-memory-track"><div class="dialog-memory-fill" id="skill-memory-fill"></div></div>
+                        <span class="dialog-memory-text" id="skill-equipment-memory-summary">0 / 0</span>
                     </div>
-                    <div class="skill-memory-bar">
-                        <div class="skill-memory-fill" id="skill-memory-fill"></div>
+                    <div class="dialog-panel-columns">
+                        <nav class="dialog-tabs" aria-label="技能分类">
+                            <button type="button" data-dialog-tab="equipped">已装备</button>
+                            <button type="button" data-dialog-tab="learned">已学习</button>
+                        </nav>
+                        <div id="skill-equipment-list" class="dialog-list" aria-label="技能列表"></div>
+                        <section class="dialog-detail" aria-label="技能详情">
+                            <div id="skill-equipment-detail" class="dialog-detail-body" aria-live="polite"></div>
+                            <div id="skill-equipment-actions" class="dialog-detail-actions"></div>
+                        </section>
                     </div>
-                    <div class="skill-equipment-sections">
-                        <div class="skill-panel">
-                            <div class="skill-panel-title">已装备技能</div>
-                            <div id="equipped-skill-list" class="skill-list-container compact"></div>
-                        </div>
-                        <div class="skill-panel">
-                            <div class="skill-panel-title">已学技能</div>
-                            <div id="learned-skill-list" class="skill-list-container compact"></div>
-                        </div>
-                    </div>
-                    <div class="modal-buttons">
-                        <button class="modal-btn cancel" onclick="closeSkillEquipmentModal()">关闭</button>
-                    </div>
-                </div>
+                </section>
             </div>
         `);
+    }
+
+    // 挂载进 #main-viewport 并绑定点击委托（只做一次）。
+    if (!skillLibraryPanel.api) {
+        skillLibraryPanel.modal = document.getElementById('skill-library-modal');
+        skillLibraryPanel.api = DialogPanel.mount(skillLibraryPanel.modal);
+        skillLibraryPanel.modal.addEventListener('click', onLibraryClick);
+    }
+    if (!skillEquipPanel.api) {
+        skillEquipPanel.modal = document.getElementById('skill-equipment-modal');
+        skillEquipPanel.api = DialogPanel.mount(skillEquipPanel.modal);
+        skillEquipPanel.modal.addEventListener('click', onEquipClick);
     }
 }
 
@@ -99,17 +126,10 @@ function exposeSkillFunctions() {
     window.closeSkillEquipmentModal = closeSkillEquipmentModal;
     window.equipSkill = equipSkill;
     window.unequipSkill = unequipSkill;
-    window.changeSkillLibraryFilter = changeSkillLibraryFilter;
 }
 
 function getSkillCategories() {
-    return ['全部', '攻击', '防御', '辅助', '控制'];
-}
-
-function getSkillEntries(filter = '全部') {
-    return Object.entries(skillList || {}).filter(([, skill]) => {
-        return filter === '全部' || skill.category === filter;
-    });
+    return ['攻击', '防御', '辅助', '控制'];
 }
 
 function getLearnedSkillLevel(skillId) {
@@ -157,229 +177,126 @@ function formatSkillRequirement(condition) {
     return '';
 }
 
-function renderRequirementList(requires, failedPaths) {
-    const entries = Object.entries(requires || {});
-    if (!entries.length) {
-        return '<div class="skill-requirement-list"><span class="skill-requirement ok">无前置条件</span></div>';
-    }
-
-    return `
-        <div class="skill-requirement-list">
-            ${entries.map(([path, condition]) => {
-                const failed = failedPaths.includes(path);
-                return `<span class="skill-requirement ${failed ? 'failed' : 'ok'}">${getSkillRequirementLabel(path)} ${formatSkillRequirement(condition)}</span>`;
-            }).join('')}
-        </div>
-    `;
-}
-
 function getSkillSummaryText(skillId, level) {
     const levelData = getSkillLevelData(skillId, level);
     return levelData ? levelData.effectDesc : '暂无效果说明';
 }
 
-function getSkillMemoryText(skillId) {
-    return `记忆 ${getSkillMemorySlots(skillId)} 点`;
-}
+/* ============ 技能习得（藏经阁） ============ */
 
-function buildSkillLevelDetails(skillId, learnedLevel) {
-    const skill = skillList?.[skillId];
-    if (!skill) return '';
-
-    return `
-        <details class="skill-level-details">
-            <summary>查看等级详情</summary>
-            <div class="skill-level-list">
-                ${skill.levels.map((levelData, index) => {
-                    const level = index + 1;
-                    const stateClass = level <= learnedLevel ? 'learned' : (level === learnedLevel + 1 ? 'next' : 'locked');
-                    const stateText = level <= learnedLevel ? '已学' : (level === learnedLevel + 1 ? '可学' : '未解锁');
-                    const requirementCheck = checkSkillRequirements(skillId, level);
-                    return `
-                        <div class="skill-level-row ${stateClass}">
-                            <div class="skill-level-head">
-                                <span class="skill-level-name">Lv${level}</span>
-                                <span class="skill-level-state">${stateText}</span>
-                            </div>
-                            <div class="skill-level-meta">学习费用 ${levelData.cost} 金</div>
-                            <div class="skill-level-effect">${levelData.effectDesc}</div>
-                            ${renderRequirementList(levelData.requires, requirementCheck.failed)}
-                        </div>
-                    `;
-                }).join('')}
-            </div>
-        </details>
-    `;
-}
-
-function updateSkillModalPosition(modalId) {
-    const modal = document.getElementById(modalId);
-    if (!modal) return;
-    modal.style.display = 'block';
-    requestAnimationFrame(() => {
-        fitModalToViewport(modal);
-        bindModalAutoFit(modal);
-    });
+function onLibraryClick(event) {
+    const button = event.target.closest('button');
+    if (!button || !skillLibraryPanel.modal.contains(button)) return;
+    if (button.hasAttribute('data-dialog-close')) return; // 由 DialogPanel 处理
+    if (button.dataset.dialogTab) {
+        currentSkillLibraryTab = button.dataset.dialogTab;
+        selectedLibrarySkill = null;
+        renderSkillLibrary();
+    } else if (button.dataset.libraryItem) {
+        selectedLibrarySkill = button.dataset.libraryItem;
+        renderSkillLibrary();
+    } else if (button.dataset.libraryAction === 'learn' && selectedLibrarySkill) {
+        learnSkill(selectedLibrarySkill);
+    }
 }
 
 function renderSkillLibrary() {
-    const summary = document.getElementById('skill-library-memory-summary');
-    const filters = document.getElementById('skill-library-filters');
     const list = document.getElementById('skill-library-list');
-    if (!summary || !filters || !list) return;
+    const detail = document.getElementById('skill-library-detail');
+    const actions = document.getElementById('skill-library-actions');
+    if (!list || !detail || !actions) return;
 
-    summary.textContent = `记忆 ${getUsedMemorySlots()}/${getMaxMemorySlots()} · 学识 ${playerStats?.学识 || 0}`;
+    skillLibraryPanel.modal.querySelectorAll('[data-dialog-tab]').forEach(b => {
+        b.setAttribute('aria-pressed', String(b.dataset.dialogTab === currentSkillLibraryTab));
+    });
 
-    filters.innerHTML = getSkillCategories().map(category => `
-        <button class="skill-filter-btn ${category === currentSkillLibraryFilter ? 'active' : ''}" onclick="changeSkillLibraryFilter('${category}')">${category}</button>
-    `).join('');
+    const ids = Object.keys(skillList || {}).filter(id => skillList[id].category === currentSkillLibraryTab);
+    if (selectedLibrarySkill && !ids.includes(selectedLibrarySkill)) selectedLibrarySkill = null;
 
-    const entries = getSkillEntries(currentSkillLibraryFilter);
-    if (!entries.length) {
-        list.innerHTML = '<div class="skill-empty-state">当前分类下没有技能。</div>';
+    list.replaceChildren();
+    if (!ids.length) {
+        list.append(node('p', '当前类型下没有技能。', 'dialog-empty'));
+    } else {
+        ids.forEach(id => {
+            const skill = skillList[id];
+            const learned = getLearnedSkillLevel(id);
+            const next = getNextLearnableLevel(id);
+            const badge = next == null ? '已满级' : `Lv${learned} → Lv${next}`;
+            const btn = node('button', undefined, 'dialog-item');
+            btn.type = 'button';
+            btn.dataset.libraryItem = id;
+            btn.setAttribute('aria-pressed', String(id === selectedLibrarySkill));
+            btn.append(node('span', skill.name, 'dialog-item-name'), node('span', badge, 'dialog-item-badge'));
+            list.append(btn);
+        });
+    }
+
+    detail.replaceChildren(); actions.replaceChildren();
+    if (!selectedLibrarySkill) {
+        detail.append(node('h3', currentSkillLibraryTab + '技能'), node('p', '选择一项技能，查看下一级的费用、条件与效果。'));
         return;
     }
 
-    list.innerHTML = entries.map(([skillId, skill]) => {
-        const learnedLevel = getLearnedSkillLevel(skillId);
-        const nextLevel = getNextLearnableLevel(skillId);
-        const equippedLevel = getEquippedSkillLevel(skillId);
+    const skill = skillList[selectedLibrarySkill];
+    const learned = getLearnedSkillLevel(selectedLibrarySkill);
+    const next = getNextLearnableLevel(selectedLibrarySkill);
+    detail.append(node('h3', skill.name));
 
-        if (nextLevel == null) {
-            return `
-                <div class="skill-card maxed">
-                    <div class="skill-card-top">
-                        <div>
-                            <div class="skill-title-row"><span class="skill-title">${skill.name}</span><span class="skill-badge success">Lv${learnedLevel}/Lv${skill.levels.length}</span></div>
-                            <div class="skill-desc">${skill.description}</div>
-                        </div>
-                        <div class="skill-card-tags"><span class="skill-tag">${skill.category}</span>${equippedLevel ? `<span class="skill-tag equipped">已装备 Lv${equippedLevel}</span>` : ''}</div>
-                    </div>
-                    <div class="skill-meta-row">已满级</div>
-                    ${buildSkillLevelDetails(skillId, learnedLevel)}
-                </div>
-            `;
-        }
-
-        const nextLevelData = getSkillLevelData(skillId, nextLevel);
-        const requirementCheck = checkSkillRequirements(skillId, nextLevel);
-        const canAfford = (playerStats?.金钱 || 0) >= (nextLevelData?.cost || 0);
-        const canLearn = requirementCheck.ok && canAfford;
-
-        return `
-            <div class="skill-card ${canLearn ? '' : 'locked'}">
-                <div class="skill-card-top">
-                    <div>
-                        <div class="skill-title-row"><span class="skill-title">${skill.name}</span><span class="skill-badge">Lv${learnedLevel} → Lv${nextLevel}</span></div>
-                        <div class="skill-desc">${skill.description}</div>
-                    </div>
-                    <div class="skill-card-tags"><span class="skill-tag">${skill.category}</span>${equippedLevel ? `<span class="skill-tag equipped">已装备 Lv${equippedLevel}</span>` : ''}</div>
-                </div>
-                <div class="skill-meta-row">学习费用 ${nextLevelData.cost} 金 · ${getSkillMemoryText(skillId)}</div>
-                <div class="skill-effect-row">${nextLevelData.effectDesc}</div>
-                ${renderRequirementList(nextLevelData.requires, requirementCheck.failed)}
-                <div class="skill-card-actions">
-                    <button class="skill-action-btn ${canLearn ? '' : 'disabled'}" ${canLearn ? `onclick="learnSkill('${skillId}')"` : 'disabled'}>${canAfford ? '学习' : '金钱不足'}</button>
-                </div>
-                <details class="skill-level-details" id="skill-detail-${skillId}">
-                    <summary>等级详情</summary>
-                    <div class="skill-level-list">
-                        ${skill.levels.map((levelData, index) => {
-                            const level = index + 1;
-                            const stateClass = level <= learnedLevel ? 'learned' : (level === nextLevel ? 'next' : 'locked');
-                            const stateText = level <= learnedLevel ? '已学' : (level === nextLevel ? '可学' : '未解锁');
-                            const check = checkSkillRequirements(skillId, level);
-                            return `
-                                <div class="skill-level-row ${stateClass}">
-                                    <div class="skill-level-head">
-                                        <span class="skill-level-name">Lv${level}</span>
-                                        <span class="skill-level-state">${stateText}</span>
-                                    </div>
-                                    <div class="skill-level-meta">学习费用 ${levelData.cost} 金</div>
-                                    <div class="skill-level-effect">${levelData.effectDesc}</div>
-                                    ${renderRequirementList(levelData.requires, check.failed)}
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-                </details>
-            </div>
-        `;
-    }).join('');
-}
-
-function renderSkillEquipment() {
-    const summary = document.getElementById('skill-equipment-memory-summary');
-    const fill = document.getElementById('skill-memory-fill');
-    const equippedList = document.getElementById('equipped-skill-list');
-    const learnedList = document.getElementById('learned-skill-list');
-    if (!summary || !fill || !equippedList || !learnedList) return;
-
-    const maxMemory = getMaxMemorySlots();
-    const usedMemory = getUsedMemorySlots();
-    const percentage = maxMemory > 0 ? Math.min(100, usedMemory / maxMemory * 100) : 0;
-
-    summary.textContent = `记忆 ${usedMemory}/${maxMemory}`;
-    fill.style.width = `${percentage}%`;
-
-    const learnedEntries = Object.entries(skillList || {}).filter(([skillId]) => getLearnedSkillLevel(skillId) > 0);
-    const equippedEntries = learnedEntries.filter(([skillId]) => getEquippedSkillLevel(skillId) > 0);
-
-    equippedList.innerHTML = equippedEntries.length ? equippedEntries.map(([skillId, skill]) => {
-        const equippedLevel = getEquippedSkillLevel(skillId);
-        return `
-            <div class="skill-card compact equipped-card">
-                <div class="skill-title-row"><span class="skill-title">${skill.name}</span><span class="skill-badge success">Lv${equippedLevel}</span></div>
-                <div class="skill-effect-row">${getSkillSummaryText(skillId, equippedLevel)}</div>
-                <div class="skill-meta-row">${getSkillMemoryText(skillId)}</div>
-                <div class="skill-equip-actions">
-                    <button class="skill-action-btn ghost" onclick="unequipSkill('${skillId}')">卸下</button>
-                </div>
-            </div>
-        `;
-    }).join('') : '<div class="skill-empty-state">当前没有已装备技能。</div>';
-
-    learnedList.innerHTML = learnedEntries.length ? learnedEntries.map(([skillId, skill]) => {
-        const learnedLevel = getLearnedSkillLevel(skillId);
-        const equippedLevel = getEquippedSkillLevel(skillId);
-        const isEquipped = equippedLevel > 0;
-        return `
-            <div class="skill-card compact ${equippedLevel ? 'is-equipped' : ''}">
-                <div class="skill-title-row"><span class="skill-title">${skill.name}</span><span class="skill-badge ${isEquipped ? 'success' : ''}">${isEquipped ? '已装备' : '已学'} Lv${learnedLevel}</span></div>
-                <div class="skill-effect-row">${getSkillSummaryText(skillId, learnedLevel)}</div>
-                <div class="skill-meta-row">${getSkillMemoryText(skillId)}</div>
-                <div class="skill-equip-actions">
-                    ${isEquipped ? '<span class="skill-tag equipped">当前已装备</span>' : `<button class="skill-action-btn" onclick="equipSkill('${skillId}')">装备</button>`}
-                </div>
-            </div>
-        `;
-    }).join('') : '<div class="skill-empty-state">你还没有学会任何技能。</div>';
-}
-
-function changeSkillLibraryFilter(filter) {
-    currentSkillLibraryFilter = filter;
-    renderSkillLibrary();
-}
-
-async function persistSkillState() {
-    if (typeof saveGameData === 'function') {
-        await saveGameData();
-    } else if (typeof syncGameDataFromVariables === 'function') {
-        syncGameDataFromVariables();
+    if (next == null) {
+        detail.append(node('p', `该技能已满级（Lv${learned}）。`));
+        return;
     }
+
+    const levelData = getSkillLevelData(selectedLibrarySkill, next);
+    const check = checkSkillRequirements(selectedLibrarySkill, next);
+    const canAfford = (playerStats?.金钱 || 0) >= (levelData?.cost || 0);
+
+    const meta = node('div', undefined, 'dialog-meta');
+    meta.append(
+        node('p', `目标等级：Lv${next}`),
+        node('p', `学习费用：${levelData.cost} 金`),
+        node('p', `记忆点：${getSkillMemorySlots(selectedLibrarySkill)} 点`)
+    );
+    detail.append(meta);
+
+    // 学习条件（不满足者红色标出）
+    const entries = Object.entries(levelData.requires || {});
+    if (!entries.length) {
+        detail.append(node('p', '学习条件：无前置条件', 'dialog-req ok'));
+    } else {
+        detail.append(node('p', '学习条件：'));
+        entries.forEach(([path, condition]) => {
+            const failed = check.failed.includes(path);
+            detail.append(node('div', `${getSkillRequirementLabel(path)} ${formatSkillRequirement(condition)}`, `dialog-req ${failed ? 'failed' : 'ok'}`));
+        });
+    }
+
+    detail.append(node('p', '效果：' + levelData.effectDesc));
+
+    const learnBtn = node('button');
+    learnBtn.type = 'button';
+    learnBtn.dataset.libraryAction = 'learn';
+    if (check.ok && canAfford) {
+        learnBtn.textContent = '学习';
+    } else if (!canAfford) {
+        learnBtn.textContent = '金钱不足';
+        learnBtn.disabled = true;
+    } else {
+        learnBtn.textContent = '条件未满足';
+        learnBtn.disabled = true;
+    }
+    actions.append(learnBtn);
 }
 
 function showSkillLibrary() {
     closeAllSpecialModals();
+    selectedLibrarySkill = null;
     renderSkillLibrary();
-    updateSkillModalPosition('skill-library-modal');
+    skillLibraryPanel.api.open(document.activeElement);
 }
 
 function closeSkillLibraryModal() {
-    const modal = document.getElementById('skill-library-modal');
-    if (!modal) return;
-    modal.style.display = 'none';
-    modal._unbindFit && modal._unbindFit();
+    skillLibraryPanel.api && skillLibraryPanel.api.close();
 }
 
 async function learnSkill(skillId) {
@@ -416,38 +333,133 @@ async function learnSkill(skillId) {
             checkAllValueRanges();
             updateAllDisplays();
             await persistSkillState();
+            selectedLibrarySkill = skillId;
             renderSkillLibrary();
-            if (document.getElementById('skill-equipment-modal')?.style.display === 'block') {
-                renderSkillEquipment();
-            }
+            if (skillEquipPanel.api && skillEquipPanel.api.isOpen()) renderSkillEquipment();
             showModal(`${skill.name} 已提升至 Lv${nextLevel}。`);
         }
     );
 }
 
+/* ============ 技能管理（查看技能） ============ */
+
+function onEquipClick(event) {
+    const button = event.target.closest('button');
+    if (!button || !skillEquipPanel.modal.contains(button)) return;
+    if (button.hasAttribute('data-dialog-close')) return; // 由 DialogPanel 处理
+    if (button.dataset.dialogTab) {
+        currentSkillEquipTab = button.dataset.dialogTab;
+        selectedEquipSkill = null;
+        renderSkillEquipment();
+    } else if (button.dataset.skillItem) {
+        selectedEquipSkill = button.dataset.skillItem;
+        renderSkillEquipment();
+    } else if (button.dataset.skillAction === 'equip' && selectedEquipSkill) {
+        equipSkill(selectedEquipSkill);
+    } else if (button.dataset.skillAction === 'unequip' && selectedEquipSkill) {
+        unequipSkill(selectedEquipSkill);
+    }
+}
+
+function renderSkillEquipment() {
+    const summary = document.getElementById('skill-equipment-memory-summary');
+    const fill = document.getElementById('skill-memory-fill');
+    const list = document.getElementById('skill-equipment-list');
+    const detail = document.getElementById('skill-equipment-detail');
+    const actions = document.getElementById('skill-equipment-actions');
+    if (!summary || !fill || !list || !detail || !actions) return;
+
+    const maxMemory = getMaxMemorySlots();
+    const usedMemory = getUsedMemorySlots();
+    summary.textContent = `${usedMemory} / ${maxMemory}`;
+    fill.style.width = (maxMemory > 0 ? Math.min(100, usedMemory / maxMemory * 100) : 0) + '%';
+
+    skillEquipPanel.modal.querySelectorAll('[data-dialog-tab]').forEach(b => {
+        b.setAttribute('aria-pressed', String(b.dataset.dialogTab === currentSkillEquipTab));
+    });
+
+    const isEquippedTab = currentSkillEquipTab === 'equipped';
+    const equippedIds = Object.keys(equippedSkills || {}).filter(id => getEquippedSkillLevel(id) > 0);
+    const learnedIds = Object.keys(learnedSkills || {}).filter(id => getLearnedSkillLevel(id) > 0);
+    // 已装备选项卡 = 已装备技能；已学习选项卡 = 已学但未装备的技能。
+    const ids = isEquippedTab ? equippedIds : learnedIds.filter(id => !equippedSkills?.[id]);
+    // 按 skillList 配置顺序排列
+    const ordered = Object.keys(skillList || {}).filter(id => ids.includes(id));
+
+    if (selectedEquipSkill && !ordered.includes(selectedEquipSkill)) selectedEquipSkill = null;
+
+    list.replaceChildren();
+    if (!ordered.length) {
+        list.append(node('p', isEquippedTab ? '当前没有已装备技能。' : '当前没有可装备的已学技能。', 'dialog-empty'));
+    } else {
+        ordered.forEach(id => {
+            const skill = skillList[id];
+            const level = isEquippedTab ? getEquippedSkillLevel(id) : getLearnedSkillLevel(id);
+            const btn = node('button', undefined, 'dialog-item');
+            btn.type = 'button';
+            btn.dataset.skillItem = id;
+            btn.setAttribute('aria-pressed', String(id === selectedEquipSkill));
+            btn.append(node('span', skill.name, 'dialog-item-name'), node('span', 'Lv' + level, 'dialog-item-badge'));
+            list.append(btn);
+        });
+    }
+
+    detail.replaceChildren(); actions.replaceChildren();
+    if (!selectedEquipSkill) {
+        detail.append(node('h3', isEquippedTab ? '已装备' : '已学习'), node('p', '选择一项技能查看详情。'));
+        return;
+    }
+
+    const skill = skillList[selectedEquipSkill];
+    const level = isEquippedTab ? getEquippedSkillLevel(selectedEquipSkill) : getLearnedSkillLevel(selectedEquipSkill);
+    detail.append(node('h3', skill.name));
+    const meta = node('div', undefined, 'dialog-meta');
+    meta.append(
+        node('p', `当前等级：Lv${level}`),
+        node('p', `记忆点：${getSkillMemorySlots(selectedEquipSkill)} 点`),
+        node('p', `类型：${skill.category}`)
+    );
+    detail.append(meta, node('p', getSkillSummaryText(selectedEquipSkill, level)));
+
+    const btn = node('button');
+    btn.type = 'button';
+    if (isEquippedTab) {
+        btn.textContent = '卸下';
+        btn.dataset.skillAction = 'unequip';
+    } else {
+        btn.textContent = '装备';
+        btn.dataset.skillAction = 'equip';
+    }
+    actions.append(btn);
+}
+
 function showSkillEquipment() {
     closeAllSpecialModals();
+    selectedEquipSkill = null;
     renderSkillEquipment();
-    updateSkillModalPosition('skill-equipment-modal');
+    skillEquipPanel.api.open(document.activeElement);
     toggleDropdown('attribute-dropdown');
 }
 
 function closeSkillEquipmentModal() {
-    const modal = document.getElementById('skill-equipment-modal');
-    if (!modal) return;
-    modal.style.display = 'none';
-    modal._unbindFit && modal._unbindFit();
+    skillEquipPanel.api && skillEquipPanel.api.close();
 }
 
-async function equipSkill(skillId, level) {
+async function persistSkillState() {
+    if (typeof saveGameData === 'function') {
+        await saveGameData();
+    } else if (typeof syncGameDataFromVariables === 'function') {
+        syncGameDataFromVariables();
+    }
+}
+
+async function equipSkill(skillId) {
     const skill = skillList?.[skillId];
     const learnedLevel = getLearnedSkillLevel(skillId);
-    const targetLevel = Number(level) || learnedLevel;
+    const targetLevel = learnedLevel;
     const levelData = getSkillLevelData(skillId, targetLevel);
-    if (!skill || !levelData) return;
-
-    if (targetLevel > learnedLevel) {
-        showModal('该等级尚未学会，无法装备。');
+    if (!skill || !levelData || targetLevel < 1) {
+        showModal('该技能尚未学会，无法装备。');
         return;
     }
 
@@ -463,20 +475,18 @@ async function equipSkill(skillId, level) {
 
     equippedSkills[skillId] = targetLevel;
     await persistSkillState();
+    selectedEquipSkill = skillId;
     renderSkillEquipment();
-    if (document.getElementById('skill-library-modal')?.style.display === 'block') {
-        renderSkillLibrary();
-    }
+    if (skillLibraryPanel.api && skillLibraryPanel.api.isOpen()) renderSkillLibrary();
 }
 
 async function unequipSkill(skillId) {
     if (!equippedSkills || !equippedSkills[skillId]) return;
     delete equippedSkills[skillId];
     await persistSkillState();
+    selectedEquipSkill = skillId;
     renderSkillEquipment();
-    if (document.getElementById('skill-library-modal')?.style.display === 'block') {
-        renderSkillLibrary();
-    }
+    if (skillLibraryPanel.api && skillLibraryPanel.api.isOpen()) renderSkillLibrary();
 }
 
 if (document.readyState === 'loading') {
