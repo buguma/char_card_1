@@ -1,10 +1,10 @@
 /**
  * prompt-builder.js - Prompt 编排（6 条消息结构）
  * Phase 2.3：重构为与"整理后的log"一致的消息格式
- *   msg1: system (开场+settings+Details+background前半；MainNPCs/UserInfo 位于 history 内 </PreviousMemories> 之后)
+ *   msg1: system (开场+settings+Details+background前半)
  *   msg2: user   ([Start a new chat])
  *   msg3: assistant (LatestReply 包裹块)
- *   msg4: user   (用户输入 + MainTextGuidance + 105 + Order[内含110格式规范] + ThinkGuidance)
+ *   msg4: user   (用户输入 + MainTextGuidance + 105 + 110 + Order + ThinkGuidance)
  *   msg5: assistant (jailbreak prefill)
  *   msg6: user   (final instruction)
  * 依赖：template-engine.js, prompt-data-core.js, prompt-data-extra.js,
@@ -560,15 +560,13 @@ var promptBuilder = (function() {
     }
 
     /**
-     * 构建 HistorySummary 块（三段式结构 + MainNPCs/UserInfo）
-     * 结构：PreviousMemories → MainNPCs → UserInfo → RecalledMemories → RecentMemories
+     * 构建 HistorySummary 块（三段式结构）
      * @param {Array} previousMemories  - 经预算截断的 weekHistory 条目
      * @param {Array} recentSummaries   - 近期 summaryHistory 条目（RecentMemories）
      * @param {Array} recalledMemories  - 向量召回的孤儿 L0 条目
      * @param {object} [recalledEvents] - L2 召回事件 { direct, priorById }
      * @param {string} [searchText]     - 本次用户输入 + 上一次 AI 回复，用于 [已确立事实]/[人物弧光] 在场判定
      * @param {object} [recallConfig]   - gameData.recallConfig
-     * @param {string} [npcUserBlock]   - MainNPCs + UserInfo 预渲染块（置于 </PreviousMemories> 与召回记忆之间）
      */
     function _buildHistorySummaryBlock(previousMemories, recentSummaries, recalledMemories, recalledEvents, searchText, recallConfig, npcUserBlock) {
         var lines = ['<!-- <HistorySummary> is a brief summary of what has happened so far. Please read it to continue the story. -->'];
@@ -591,7 +589,7 @@ var promptBuilder = (function() {
         lines.push('');
         lines.push('</PreviousMemories>');
 
-        // --- MainNPCs + UserInfo（本轮在场 NPC 信息与主角信息，置于历史周总结之后、召回记忆之前）---
+        // 动态角色与主角信息后置，稳定设定和周记忆前缀可复用缓存。
         if (npcUserBlock) {
             lines.push('');
             lines.push(npcUserBlock);
@@ -628,12 +626,10 @@ var promptBuilder = (function() {
         return lines.join('\n');
     }
 
-    /**
-     * 构建 MainNPCs + UserInfo 块（注入位置：<history> 内 </PreviousMemories> 之后、召回记忆与 <RecentMemories> 之前）
-     */
+    // 保留原有提示词文本，仅将动态信息移入 history。
     function _buildNpcUserBlock(variables, npcBlocks) {
         var parts = [];
-        parts.push('<!-- <MainNPCs> is the detailed information of characters in recent story. -->');
+        parts.push('<!-- <MainNPCs> is the information of characters in this story. -->');
         parts.push('');
         parts.push('<MainNPCs>');
         if (npcBlocks && npcBlocks.length > 0) {
@@ -645,17 +641,16 @@ var promptBuilder = (function() {
         parts.push('');
         parts.push('</MainNPCs>');
         parts.push('');
-        // 040 主角属性（<UserInfo>）
         parts.push(templateEngine.renderPromptTemplate(_po('CORE_040', PROMPT_CORE_040), variables));
         return parts.join('\n');
     }
 
     /**
      * 构建消息1: SYSTEM
-     * 结构: opening + <settings>(info + character=010) + [Details...](020 + 自定义世界书No.1)
+     * 结构: opening + <settings>(info + character=010) + [Details...](020 + 世界书)
      *       + <background>(<fresh> + <writing_style> + <history>(HistorySummary + [Start a new Chat]))
      */
-    function _buildMsg1System(variables, wbBlocks, historySummaryBlock) {
+    function _buildMsg1System(variables, npcBlocks, wbBlocks, historySummaryBlock) {
         var playerName = variables.user || '主角';
         var parts = [];
 
@@ -667,30 +662,32 @@ var promptBuilder = (function() {
         parts.push('<settings>');
         parts.push('# "' + playerName + '"是role_user的角色与身份，user的言语与动作皆为' + playerName + '所为:');
         parts.push('');
-        parts.push('## `<tone>`是需参照的叙事语气和基调。');
-        parts.push('<tone>');
+        parts.push('## `<info>`是需参照的信息以及资料。');
+        parts.push('<info>');
         parts.push('');
         parts.push(_po('INFO_TONE', PROMPT_INFO_TONE));
         parts.push('');
-        parts.push('</tone>');
+        parts.push('</info>');
         parts.push('');
-        parts.push('# 不论剧情如何发展，均以<main_settings></main_settings>中规定的背景设定为准。');
+        parts.push('# 不论剧情如何发展，均以<character></character>中规定的角色形象为准。');
         parts.push('');
-        parts.push('<main_settings>');
+        parts.push('<character>');
         parts.push('');
         // 010 天山派背景
         parts.push(templateEngine.renderPromptTemplate(_po('CORE_010', PROMPT_CORE_010), variables));
         parts.push('');
-        parts.push('</main_settings>');
+        parts.push('</character>');
+        parts.push('</settings>');
+        parts.push('');
 
         // [Details of the fictional world...]
-        parts.push('[Additional settings of the fictional world:');
+        parts.push('[Details of the fictional world the RP is set in:');
         parts.push('');
         // 020 地点介绍（按 GameMode/mapLocation 选取单个地点，支持按地点单独覆盖）
         parts.push(_renderLocationIntro(variables.gameData));
         parts.push('');
 
-        // 自定义世界书（系统设置-游戏设置-提示词管理 里维护，按启用状态+关键词命中插入，插入位置：地点信息之后、] 之前）
+        // 自定义世界书（按启用状态+关键词命中插入，位置：地点信息之后、] 之前）
         if (wbBlocks && wbBlocks.length > 0) {
             for (var wi = 0; wi < wbBlocks.length; wi++) {
                 parts.push(templateEngine.renderPromptTemplate(wbBlocks[wi], variables));
@@ -699,8 +696,6 @@ var promptBuilder = (function() {
         }
 
         parts.push(']');
-        parts.push('');
-        parts.push('</settings>');
         parts.push('');
 
         // <background>
@@ -745,8 +740,8 @@ var promptBuilder = (function() {
 
     /**
      * 构建消息4: USER
-     * 结构: 用户输入 + <MainTextGuidance> + 105列表
-     *       + </history></background> + <Order>(内含110格式规范，位于</request>之后) + <ThinkGuidance> + </Order>
+     * 结构: 用户输入 + <MainTextGuidance> + 105列表 + 110格式规范
+     *       + </history></background> + <Order> + <ThinkGuidance> + </Order>
      */
     function _buildMsg4User(variables, userMessage, actionGuide, isDeepSeek, wbBlocks2) {
         var parts = [];
@@ -755,7 +750,7 @@ var promptBuilder = (function() {
         parts.push(PROMPT_FRESH);
         parts.push('');
 
-        // 自定义世界书分类No.2（系统设置-游戏设置-提示词管理 里维护，插入位置：<fresh> 与 <user_input> 之间）
+        // 自定义世界书分类No.2（系统设置-游戏设置-提示词管理 里维护，插入位置：</fresh> 与 <user_input> 之间）
         if (wbBlocks2 && wbBlocks2.length > 0) {
             for (var w2 = 0; w2 < wbBlocks2.length; w2++) {
                 parts.push(templateEngine.renderPromptTemplate(wbBlocks2[w2], variables));
@@ -784,34 +779,24 @@ var promptBuilder = (function() {
         parts.push(templateEngine.renderPromptTemplate(PROMPT_CORE_105, variables));
         parts.push('');
 
+        // 110 格式规范
+        parts.push(templateEngine.renderPromptTemplate(PROMPT_CORE_110, variables));
+        parts.push('');
+
         // 闭合 background
         parts.push('</background>');
         parts.push('');
 
         // <Order> (含 EJS enamor 条件)
-        var orderText = templateEngine.renderPromptTemplate(_po('ORDER', PROMPT_ORDER), variables);
-        // 110 格式规范：注入 <Order> 内，</request> 之后（兜底：直接放在 </Order> 之前，即 <ANALGuidance>/<ThinkGuidance> 之前）
-        // 各段首尾空白统一压缩，保证拼接处恰好一个空行，不出现成串换行
-        var formatGuide = templateEngine.renderPromptTemplate(PROMPT_CORE_110, variables).replace(/^\s+|\s+$/g, '');
-        var _reqEnd = orderText.lastIndexOf('</request>');
-        if (_reqEnd !== -1) {
-            _reqEnd += '</request>'.length;
-            orderText = orderText.slice(0, _reqEnd).replace(/\s+$/, '') + '\n\n'
-                      + formatGuide + '\n\n'
-                      + orderText.slice(_reqEnd).replace(/^\s+/, '');
-        } else {
-            orderText = orderText.replace(/\s+$/, '') + '\n\n' + formatGuide;
-        }
-        orderText = orderText.replace(/\s+$/, '');
-        parts.push(orderText);
+        parts.push(templateEngine.renderPromptTemplate(_po('ORDER', PROMPT_ORDER), variables));
         parts.push('');
 
         // <ThinkGuidance> (根据模型选择版本，需经过模板引擎替换 {{user}} 等变量)
         var thinkGuidance = isDeepSeek
             ? _po('THINK_GUIDANCE_DEEPSEEK', PROMPT_THINK_GUIDANCE_DEEPSEEK)
             : _po('THINK_GUIDANCE', PROMPT_THINK_GUIDANCE);
-        parts.push(templateEngine.renderPromptTemplate(thinkGuidance, variables).replace(/^\s+|\s+$/g, ''));
-        parts.push('</Order>');
+        parts.push(templateEngine.renderPromptTemplate(thinkGuidance, variables));
+        parts.push('\n</Order>');
 
         return parts.join('\n');
     }
@@ -867,10 +852,9 @@ var promptBuilder = (function() {
         var recalledEvents = params.recalledEvents || null;
 
         // --- 构建各条消息（先用空 HistorySummary 占位，后续注入）---
-        // MainNPCs + UserInfo 块：随 HistorySummary 一起注入 <history>（</PreviousMemories> 之后、召回记忆与 <RecentMemories> 之前）
         var npcUserBlock = _buildNpcUserBlock(variables, npcBlocks);
         var historySummaryPlaceholder = _buildHistorySummaryBlock([], [], [], null, _recallSearchText, _recallConfig, npcUserBlock);
-        var msg1Content = _buildMsg1System(variables, wbBlocks1, historySummaryPlaceholder);
+        var msg1Content = _buildMsg1System(variables, npcBlocks, wbBlocks1, historySummaryPlaceholder);
         var msg2Content = '[Start a new chat]';
         var msg3Content = _buildMsg3LatestReply(lastAssistantReply);
         var msg4Content = _buildMsg4User(variables, userMessage, actionGuide, isDeepSeek, wbBlocks2);
@@ -893,7 +877,6 @@ var promptBuilder = (function() {
                         + 24; // 6 messages × ~4 tokens structure overhead
 
         // 先扣除 RecentMemories + RecalledMemories 占用，剩余预算给 PreviousMemories
-        // （MainNPCs/UserInfo 不计入该占用块；其所在 msg1 已含在上方 fixedTokens 中）
         var recentAndRecalledBlock = _buildHistorySummaryBlock([], recentSummaries, recalledMemories, recalledEvents, _recallSearchText, _recallConfig);
         var recentAndRecalledTokens = tokenUtils.estimate(recentAndRecalledBlock);
         // [已确立事实]之上的「每周总结」开关：控制 <PreviousMemories>（weekHistory）是否注入及其 token 上限，
@@ -912,9 +895,22 @@ var promptBuilder = (function() {
             console.log('[PromptBuilder] PreviousMemories: 预算不足，丢弃最旧 ' + droppedCount + ' 条 weekHistory');
         }
 
-        // --- 构建最终 HistorySummary（含全三段 + MainNPCs/UserInfo）---
+        // --- 构建最终 HistorySummary（含全三段）---
         var finalHistorySummary = _buildHistorySummaryBlock(selectedPrevious, recentSummaries, recalledMemories, recalledEvents, _recallSearchText, _recallConfig, npcUserBlock);
-        msg1Content = _buildMsg1System(variables, wbBlocks1, finalHistorySummary);
+        msg1Content = _buildMsg1System(variables, npcBlocks, wbBlocks1, finalHistorySummary);
+
+
+
+        // 填充模式：注入 <item> 破限指令——msg5 prefill（} 内）+ msg6 user 末尾双保险
+        // （Claude 系模型对 assistant prefill 的指令性内容不敏感，user 末尾指令最有效）
+        if (typeof autoTruncate !== 'undefined' && typeof autoTruncate.getPadInstruction === 'function') {
+            var padInst = autoTruncate.getPadInstruction();
+            if (padInst) {
+                msg5Content = msg5Content.replace(/\n\}$/, '\n' + padInst + '\n}');
+                msg6Content += '\n' + padInst;
+                console.log('[PromptBuilder] 填充模式：已注入 <item> 指令到 assistant prefill + user 末尾');
+            }
+        }
 
         // --- 组装 messages ---
         var messages = [

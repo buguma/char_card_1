@@ -463,7 +463,6 @@
 
                 <!-- 悬赏任务弹窗（结构对齐汗青集：viewport-overlay + modal-content，打开时由 JS 搬到 body 突破 mainview 限制） -->
                 <style>
-                    /* 卡片配色：默认暗色（扁平/无主题），古风主题下用宣纸变量覆盖 */
                     #bounty-modal h3 { margin: 0 20px; padding: 20px 0 12px; text-align: center; flex-shrink: 0; font-size: 1.6rem; border-bottom: 2px solid #7a6a4f; }
                     body.ui-style-ancient #bounty-modal h3 { border-bottom-color: var(--ink-dark, #2c2c2c); }
                     #bounty-modal .bounty-modal-body { flex: 1; overflow-y: auto; padding: 15px 20px; }
@@ -478,7 +477,6 @@
                     .bounty-card-info { font-size: 0.8rem; opacity: 0.7; }
                     .bounty-card-reward { font-size: 0.85rem; color: #d4af37; margin-top: 4px; }
                     .bounty-empty-tip { text-align: center; opacity: 0.6; padding: 20px 0; }
-                    /* 古风主题覆盖 */
                     body.ui-style-ancient .bounty-card { background: var(--paper-dark, #e6e2d8); border: 2px solid var(--ink-dark, #2c2c2c); }
                     body.ui-style-ancient .bounty-card:hover { background: var(--paper-light, #faf8f2); }
                     body.ui-style-ancient .bounty-card-active { border-color: var(--accent-gold, #b7950b); }
@@ -614,6 +612,8 @@
                         <button class="gs-tab" data-tab="difficulty" onclick="gsSelectTab('difficulty')">难度设置</button>
                         <button class="gs-tab" data-tab="summary" onclick="gsSelectTab('summary')">总结管理</button>
                         <button class="gs-tab" data-tab="recall" onclick="gsSelectTab('recall')">召回管理</button>
+                        <button class="gs-tab" data-tab="memory" onclick="gsSelectTab('memory')">记忆编辑</button>
+                        <button class="gs-tab" data-tab="portrait" onclick="gsSelectTab('portrait')">主角立绘</button>
                         <button class="gs-tab" data-tab="prompts" onclick="gsSelectTab('prompts')">提示词管理</button>
                     </div>
                     <!-- 右侧内容区 -->
@@ -664,6 +664,14 @@
                                     <input type="range" id="gs-font-range" class="gs-range" min="1" max="5" step="1" value="2" oninput="gsOnFontLevel(this)">
                                     <span>大</span>
                                 </div>
+                            </div>
+                            <div class="gs-switch-row">
+                                <span class="gs-switch-label">正文字体</span>
+                                <select id="gs-story-font-family" class="gs-select" onchange="gsOnStoryFontFamily(this)">
+                                    <option value="sans">无衬线（原版）</option>
+                                    <option value="kai">古风楷体</option>
+                                    <option value="song">宋体 / 思源宋体</option>
+                                </select>
                             </div>
                             <!-- 音乐设置 -->
                             <h4 class="gs-subhead">音乐设置</h4>
@@ -872,6 +880,21 @@
                                 <input type="number" class="gs-recall-tokens" id="gs-recall-fragments-tokens" min="0" step="100" oninput="gsOnRecallTokens('fragments', this)">
                                 <span class="gs-switch-label">token</span>
                             </div>
+                        </div>
+                        <!-- 记忆编辑 -->
+                        <div class="gs-panel" id="gs-panel-memory">
+                            <h3>记忆编辑</h3>
+                            <div style="font-size:12px;color:#aaa;margin-bottom:12px;line-height:1.7;">
+                                手动查看/修改 AI 的记忆内容（碎片日记、剧情事件、已确立事实、人物弧光、每周总结）。<br>
+                                保存后向量由系统下一轮自动重建，无需手动处理。<br>
+                                <span style="color:#e0a030;">注意：修改会立即影响后续 AI 的回忆，请谨慎操作。</span>
+                            </div>
+                            <button class="modal-btn" onclick="memoryEditor.open()">打开记忆编辑器</button>
+                        </div>
+                        <!-- 主角自定义立绘 -->
+                        <div class="gs-panel" id="gs-panel-portrait">
+                            <h3>主角立绘</h3>
+                            <div id="user-portrait-manager-root"></div>
                         </div>
                         <!-- 提示词管理 -->
                         <div class="gs-panel" id="gs-panel-prompts">
@@ -1326,11 +1349,15 @@
     <script src="module/memory-recall.js"></script>
     <script src="module/event-runner.js"></script>
     <script src="module/location-runner.js"></script>
+    <script src="module/auto-truncate.js"></script>
+    <script src="module/regex-cutoff.js"></script>
     <script src="module/pipeline.js"></script>
     
     <!-- UI 模块 -->
     <script src="ui/config-modal.js"></script>
     <script src="ui/prompt-manager-modal.js"></script>
+    <script src="ui/memory-editor.js"></script>
+    <script src="ui/user-portrait-manager.js"></script>
     <script src="module/bgm-manager.js"></script>
     <script src="module/scene3d-bridge.js"></script>
 
@@ -2093,6 +2120,7 @@ const outPut = `
                     case 'M': npcLocationM = 'none'; break;
                     case 'N': npcLocationN = 'none'; break;
                     case 'O': npcLocationO = 'none'; break;
+                    case 'P': npcLocationP = 'none'; break;
                 }
                 
                 // 如果当前场景有该NPC，更新显示
@@ -2494,7 +2522,7 @@ const outPut = `
             }
 
             // 只对不在当前位置的NPC进行重新分配
-            const npcsToShuffle = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'Z', 'M', 'N', 'O'].filter(
+            const npcsToShuffle = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'Z', 'M', 'N', 'O', 'P'].filter(
                 npcId => !npcsAtCurrentLocation.includes(npcId)
             );
             const npcOrder = npcsToShuffle.sort(() => Math.random() - 0.5);
@@ -2553,6 +2581,7 @@ const outPut = `
             npcLocationM = currentNpcLocations.M;
             npcLocationN = currentNpcLocations.N;
             npcLocationO = currentNpcLocations.O;
+            npcLocationP = currentNpcLocations.P;
             
             const activeScene = document.querySelector('.scene.active');
             if (activeScene && activeScene.id !== 'map-scene') {
@@ -3715,20 +3744,19 @@ function returnToStartScreen() {
     location.href = 'start-screen-noST.html';
 }
 
-// ========== 导出存档：自定义文件名弹窗 ==========
-// 点导出 JSON/JSONL 存档时先弹窗：输入内容并确认 → 以该内容命名；跳过或留空 → 沿用默认命名
+// JSON 与 JSONL 共用命名入口；通过 DOM 属性写入名称，避免存档名成为 HTML。
 var _exportNameDone = null;
 function promptExportSaveName(defaultName, fileExt, onDone) {
     _exportNameDone = onDone;
     var modal = document.getElementById('modal');
     var modalText = document.getElementById('modal-text');
     var modalButtons = document.getElementById('modal-buttons');
-    modalText.innerHTML =
-        '<div style="font-size: clamp(1.1rem, 3vw, 1.4rem); margin-bottom: clamp(10px, 2vw, 15px);">自定义存档文件名</div>' +
-        '<div class="input-area"><input type="text" class="input-field" id="export-name-input" placeholder="' + defaultName + '"></div>' +
-        '<div style="font-size:12px;color:#888;margin-top:6px">留空或点「跳过」将使用默认命名（' + defaultName + fileExt + '）</div>';
-    modalButtons.innerHTML =
-        '<button class="modal-btn" onclick="_confirmExportName()">确认</button>' +
+    modalText.innerHTML = '<div style="font-size:1.2rem;margin-bottom:12px">自定义存档文件名</div>' +
+        '<div class="input-area"><input type="text" class="input-field" id="export-name-input"></div>' +
+        '<div id="export-name-hint" style="font-size:12px;color:#888;margin-top:6px"></div>';
+    document.getElementById('export-name-input').placeholder = defaultName;
+    document.getElementById('export-name-hint').textContent = '留空或点「跳过」将使用默认命名（' + defaultName + fileExt + '）';
+    modalButtons.innerHTML = '<button class="modal-btn" onclick="_confirmExportName()">确认</button>' +
         '<button class="modal-btn cancel" onclick="_skipExportName()">跳过</button>';
     modal.style.display = 'block';
     setTimeout(function() { var el = document.getElementById('export-name-input'); if (el) el.focus(); }, 100);
@@ -3741,30 +3769,28 @@ function _finishExportName(name) {
 }
 function _confirmExportName() {
     var el = document.getElementById('export-name-input');
-    var v = el ? el.value.trim() : '';
-    _finishExportName(v || null); // 空输入等价跳过
+    _finishExportName(el && el.value.trim() || null);
 }
 function _skipExportName() { _finishExportName(null); }
-
 function exportSave() {
     syncGameDataFromVariables();
     var defaultName = buildSaveName();
+    // 加载弹窗随后会关闭，必须在命名异步回调之前保留向量勾选状态。
+    var chk = document.getElementById('export-include-vectors-chk');
+    var includeVectors = chk ? chk.checked : true;
     promptExportSaveName(defaultName, '.json', function(customName) {
-        _doExportSave(customName, defaultName);
+        _doExportSave(customName, defaultName, includeVectors);
     });
 }
-
-function _doExportSave(customName, defaultName) {
+function _doExportSave(customName, defaultName, includeVectors = true) {
     // 导出时保存当前活跃事件，供 importSave 恢复选项框
     gameData._activeEvent = currentRandomEvent || currentBattleEvent || null;
     var saveName = customName || defaultName;
-    var chk = document.getElementById('export-include-vectors-chk');
-    var includeVectors = chk ? chk.checked : true;
-    var json = storageService.exportSaveToJson(saveName, includeVectors);
-    delete gameData._activeEvent;
-    // 用户自定义名：消毒后直接作为文件名主体；消毒后为空（全是特殊字符）则回退默认命名
-    var fileBase = customName ? customName.replace(/[^a-zA-Z0-9一-龥]/g, '_') : '';
-    if (!fileBase) fileBase = 'jxz_save_' + defaultName.replace(/[^a-zA-Z0-9一-龥]/g, '_');
+    var json;
+    try { json = storageService.exportSaveToJson(saveName, includeVectors); }
+    finally { delete gameData._activeEvent; }
+    var fileBase = customName ? customName.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_') : '';
+    if (!fileBase || !fileBase.replace(/_/g, '')) fileBase = 'jxz_save_' + defaultName.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_');
     var filename = fileBase + '.json';
     toggleDropdown('history-dropdown');
     var p = storageService.downloadJson(filename, json);
@@ -4045,6 +4071,7 @@ function buildSaveName() {
             document.getElementById('cheat-npc-M').value = npcFavorability.M;
             document.getElementById('cheat-npc-N').value = npcFavorability.N;
             document.getElementById('cheat-npc-O').value = npcFavorability.O;
+            document.getElementById('cheat-npc-P').value = npcFavorability.P;
             
             const modal = document.getElementById('cheat-modal');
             modal.style.display = 'block';
@@ -4101,6 +4128,7 @@ function buildSaveName() {
             npcFavorability.M = parseInt(document.getElementById('cheat-npc-M').value);
             npcFavorability.N = parseInt(document.getElementById('cheat-npc-N').value);
             npcFavorability.O = parseInt(document.getElementById('cheat-npc-O').value);
+            npcFavorability.P = parseInt(document.getElementById('cheat-npc-P').value);
             // 检查数值范围
             checkAllValueRanges();
             
@@ -4536,19 +4564,26 @@ function buildSaveName() {
             const modal = document.getElementById('worldmap-modal');
             const iframe = document.getElementById('worldmap-iframe');
             
-            // 准备传递给世界地图的数据（只保留体积小的标量参数走URL，避免随游戏进度增长导致 "URI Too Long"）
+            // 准备传递给世界地图的数据
             const params = new URLSearchParams({
                 reputation: playerStats.声望,
                 mapLocation: mapLocation,
                 randomEvent: randomEvent,
                 battleEvent: battleEvent
             });
-
-            // 体积可能较大且随存档增长的数据改用 localStorage 传递（world_map.html 与本页同源，可直接读取）
-            try {
-                localStorage.setItem('worldmap_companionNPC', JSON.stringify(companionNPC));
-                localStorage.setItem('worldmap_npcFavorability', JSON.stringify(npcFavorability));
-            } catch (e) {}
+            // 大对象通过同源存储传递，避免地图 URL 超长；存储不可用时兼容旧参数通道。
+            const storeMapValue = (key, value) => {
+                const serialized = JSON.stringify(value);
+                try {
+                    localStorage.setItem('worldmap_' + key, serialized);
+                    params.delete(key);
+                }
+                catch (e) { params.set(key, serialized); }
+            };
+            storeMapValue('companionNPC', companionNPC);
+            storeMapValue('npcFavorability', npcFavorability);
+            // 每次打开先清空上个存档的地点覆盖，避免跨存档残留。
+            storeMapValue('locationOverrides', {});
 
             // 地点信息迭代：把 locationMemory 里已更新地点的 危险度/友善度/行动建议 转换成
             // world_map.html 原有的英文字段名结构，供其浅合并覆盖显示（未更新的地点不受影响）
@@ -4564,13 +4599,9 @@ function buildSaveName() {
                     if (Object.keys(o).length > 0) _overrides[loc] = o;
                 });
                 if (Object.keys(_overrides).length > 0) {
-                    try { localStorage.setItem('worldmap_locationOverrides', JSON.stringify(_overrides)); } catch (e) {}
-                } else {
-                    try { localStorage.removeItem('worldmap_locationOverrides'); } catch (e) {}
+                    storeMapValue('locationOverrides', _overrides);
                 }
             }
-            
-            // 悬赏：若有进行中任务，附带目标地点参数，供大地图叠加 ⚔ 标记
             if (typeof activeBounty !== 'undefined' && activeBounty) {
                 params.set('bountyLocation', activeBounty.locationName);
             }
@@ -4626,6 +4657,9 @@ function buildSaveName() {
             });
             if (tabId === 'prompts' && typeof promptManagerModal !== 'undefined') {
                 promptManagerModal.render(document.getElementById('gs-prompt-manager-root'));
+            }
+            if (tabId === 'portrait' && typeof userPortraitManager !== 'undefined') {
+                userPortraitManager.render(document.getElementById('user-portrait-manager-root'));
             }
         }
 
@@ -4687,6 +4721,9 @@ function buildSaveName() {
             const lvl = (typeof textFontLevel !== 'undefined' && textFontLevel) ? textFontLevel : 2;
             const fontRange = document.getElementById('gs-font-range');
             if (fontRange) fontRange.value = lvl;
+            const family = (typeof storyFontFamily !== 'undefined' && ['sans','kai','song'].includes(storyFontFamily)) ? storyFontFamily : 'sans';
+            const familySelect = document.getElementById('gs-story-font-family');
+            if (familySelect) familySelect.value = family;
 
             // 总结管理
             const _summaryCfg = (typeof gameData !== 'undefined' && gameData.summaryConfig) ? gameData.summaryConfig : {};
@@ -4860,6 +4897,13 @@ function buildSaveName() {
             applyFontLevel(lvl);
         }
 
+        function gsOnStoryFontFamily(el) {
+            const family = ['sans','kai','song'].includes(el.value) ? el.value : 'sans';
+            storyFontFamily = family;
+            if (typeof gameData !== 'undefined' && gameData) gameData.storyFontFamily = family;
+            applyStoryFontFamily(family);
+        }
+
         // ===== 3D画面设置 =====
         function gsScene3dBridge() {
             return (typeof GameSceneBridge !== 'undefined' && GameSceneBridge) ? GameSceneBridge : null;
@@ -5010,26 +5054,6 @@ function buildSaveName() {
             const btn = document.getElementById('toggle-ui-btn');
             const style = (typeof uiStyle !== 'undefined') ? uiStyle : 0;
             if (btn) btn.textContent = `风格(${style === 0 ? '古风' : '扁平'})`;
-            applyAncientLeadWrap(); // textContent 重写会移除字牌 span，需重新包裹
-        }
-
-        // ========== 古风「首字牌」系统 ==========
-        // 按钮文字拆为：首字（书法体 + 枯笔边框包裹） + 其余字（同字体小一号）。
-        // 样式由 game-styles-beautify.css 的 .be-lead/.be-rest 承载，仅古风生效。
-        function wrapAncientLeadChar(btn) {
-            if (!btn || btn.querySelector('.be-lead')) return; // 幂等：已包裹跳过
-            // 只处理纯文本按钮（含元素子节点的不动，避免破坏内部结构）
-            const hasElementChild = [...btn.childNodes].some(n => n.nodeType === 1);
-            if (hasElementChild) return;
-            const text = btn.textContent.trim();
-            if (text.length < 2) return;
-            btn.innerHTML = `<span class="be-lead">${text[0]}</span><span class="be-rest">${text.slice(1)}</span>`;
-        }
-        function applyAncientLeadWrap() {
-            const targets = document.querySelectorAll(
-                '.scene-btn[onclick], .control-btn[onclick], .dropdown-item[onclick], .back-btn, .free-action-send-btn, #regenerate-btn'
-            );
-            targets.forEach(wrapAncientLeadChar);
         }
 
         // 切换UI风格
@@ -5057,10 +5081,7 @@ function buildSaveName() {
                     document.body.classList.add('ui-style-flat');
                 }
             }
-            applyAncientLeadWrap(); // 风格切换后确保字牌包裹（扁平下无样式，包裹无害）
         }
-        // 首次加载即执行一次（脚本位于 body 尾部，DOM 已就绪）
-        applyAncientLeadWrap();
 
         // 打开玩法说明
         function openPlayGuide() {
@@ -6085,12 +6106,29 @@ function buildSaveName() {
         }
 
         function applyFontLevel(level){
-            // 基于基础字号步进：14px为第二档的基准，±2px 步进
-            const base = 14; // 当前默认字号
-            const delta = (level - 2) * 2; // 每档±2px
+            // 恢复原版阅读参数：第二档14px、每档±2px、常规字重与1.8倍行高。
+            const base = 14;
+            const delta = (level - 2) * 2;
             const size = base + delta;
             const story = document.getElementById('story-text');
-            if (story) story.style.fontSize = size + 'px';
+            if (story) {
+                // 主题样式含 !important，设置层也用 important 才能确保用户选择实际生效。
+                story.style.setProperty('font-size', size + 'px', 'important');
+                story.style.setProperty('line-height', '1.8', 'important');
+                story.style.setProperty('font-weight', '400', 'important');
+                story.style.setProperty('letter-spacing', 'normal', 'important');
+            }
+            applyStoryFontFamily((typeof storyFontFamily !== 'undefined' && storyFontFamily) ? storyFontFamily : 'sans');
+        }
+
+        function applyStoryFontFamily(family){
+            const fonts = {
+                sans: '"Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif',
+                kai: '"Ma Shan Zheng", "Kaiti", "STKaiti", "KaiTi_GB2312", "Noto Serif CJK SC", serif',
+                song: '"ZCOOL XiaoWei", "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "SimSun", serif'
+            };
+            const story = document.getElementById('story-text');
+            if (story) story.style.setProperty('font-family', fonts[family] || fonts.sans, 'important');
         }
     </script>
     <script src="module/button-sfx.js"></script>

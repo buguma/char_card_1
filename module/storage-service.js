@@ -35,6 +35,8 @@ var storageService = (function() {
     // 两个独立的分类/插入位置：1=主角信息后/] 之前，2=</fresh>与<user_input>之间
     var KEY_CUSTOM_WORLDBOOK = 'customWorldbook';
     var KEY_CUSTOM_WORLDBOOK_2 = 'customWorldbook2';
+    // 玩家自定义主角立绘：全局配置，不随单个存档切换；图片数据优先保存在 IndexedDB。
+    var KEY_USER_PORTRAITS = 'userPortraits';
 
     // localStorage key（兼容旧格式）
     var LS_APP_STATE = 'jxz_appState';
@@ -53,6 +55,7 @@ var storageService = (function() {
     var LS_PROMPT_OVERRIDES = 'jxz_promptOverrides';
     var LS_CUSTOM_WORLDBOOK = 'jxz_customWorldbook';
     var LS_CUSTOM_WORLDBOOK_2 = 'jxz_customWorldbook2';
+    var LS_USER_PORTRAITS = 'jxz_userPortraits';
 
     // localStorage key（快照降级，仅存体积可控的字段）
     var LS_SNAPSHOT_APPSTATE = 'jxz_snapshot';
@@ -218,6 +221,14 @@ var storageService = (function() {
             migrated += saves.length + 1;
         }
 
+        // 迁移旧降级存储中的玩家立绘（正常环境后续仅存 IndexedDB，避免占满 localStorage）。
+        var userPortraits = _lsGet(LS_USER_PORTRAITS);
+        if (userPortraits && typeof userPortraits === 'object') {
+            _cache[KEY_USER_PORTRAITS] = userPortraits;
+            await idbStorage.put(KEY_USER_PORTRAITS, userPortraits);
+            migrated++;
+        }
+
         if (migrated > 0) {
             console.log('[Storage] 迁移完成，共 ' + migrated + ' 个 key 写入 IndexedDB');
         } else {
@@ -272,6 +283,9 @@ var storageService = (function() {
         if (Array.isArray(customWorldbook)) _cache[KEY_CUSTOM_WORLDBOOK] = customWorldbook;
         var customWorldbook2 = _lsGet(LS_CUSTOM_WORLDBOOK_2);
         if (Array.isArray(customWorldbook2)) _cache[KEY_CUSTOM_WORLDBOOK_2] = customWorldbook2;
+
+        var userPortraits = _lsGet(LS_USER_PORTRAITS);
+        if (userPortraits && typeof userPortraits === 'object') _cache[KEY_USER_PORTRAITS] = userPortraits;
 
         // 旧格式存档 → 转为索引 + 独立 key（仅缓存中）
         var saves = _lsGet(LS_SAVES);
@@ -616,6 +630,15 @@ var storageService = (function() {
         _lsSet(LS_PROMPT_OVERRIDES, next);
     }
 
+    function savePromptOverrides(all) {
+        var next = {};
+        all = (all && typeof all === 'object') ? all : {};
+        for (var k in all) { if (all.hasOwnProperty(k)) next[k] = all[k]; }
+        _cache[KEY_PROMPT_OVERRIDES] = next;
+        _idbPut(KEY_PROMPT_OVERRIDES, next);
+        _lsSet(LS_PROMPT_OVERRIDES, next);
+    }
+
     function resetPromptOverride(key) {
         var all = loadPromptOverrides();
         if (!all.hasOwnProperty(key)) return;
@@ -642,6 +665,26 @@ var storageService = (function() {
         _cache[key] = value;
         _idbPut(key, value);
         _lsSet(_wbLsKey(slot), value);
+    }
+
+    // --- 玩家自定义主角立绘（全局配置，不随存档走）---
+    function loadUserPortraits() {
+        var value = _cache[KEY_USER_PORTRAITS];
+        if (!value || typeof value !== 'object') return { version: 1, images: {} };
+        return value;
+    }
+
+    function saveUserPortraits(data) {
+        var source = (data && typeof data === 'object') ? data : {};
+        var value = {
+            version: 1,
+            images: (source.images && typeof source.images === 'object') ? structuredClone(source.images) : {}
+        };
+        _cache[KEY_USER_PORTRAITS] = value;
+        _idbPut(KEY_USER_PORTRAITS, value);
+        // 仅在 IndexedDB 不可用时降级写入 localStorage，避免多张图片耗尽同步存储配额。
+        if (_idbAvailable) _lsRemove(LS_USER_PORTRAITS);
+        else _lsSet(LS_USER_PORTRAITS, value);
     }
 
     // --- 全量快照（snapshot_db）---
@@ -1367,9 +1410,12 @@ var storageService = (function() {
         clearLocationLayer: clearLocationLayer,
         loadPromptOverrides: loadPromptOverrides,
         savePromptOverride: savePromptOverride,
+        savePromptOverrides: savePromptOverrides,
         resetPromptOverride: resetPromptOverride,
         loadCustomWorldbook: loadCustomWorldbook,
         saveCustomWorldbook: saveCustomWorldbook,
+        loadUserPortraits: loadUserPortraits,
+        saveUserPortraits: saveUserPortraits,
         restoreL2FromPayload: _restoreL2FromPayload,
         serializeL2Embeddings: _serializeL2Embeddings,
         buildSavePayload: buildSavePayload,

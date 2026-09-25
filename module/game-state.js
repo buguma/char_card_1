@@ -66,7 +66,8 @@ let playerStats = { "武学": 20, "学识": 20, "声望": 20, "金钱": 500 };
 let combatStats = { "攻击力": 20, "生命值": 50, "暴击率": 10, "暴击伤害": 150, "格挡": 0, "穿甲": 0, "回转": 0, "吸血": 0, "反伤": 0 };
 let equipStats = { "攻击力": 0, "生命值": 0, "暴击率": 0, "暴击伤害": 0, "格挡": 0, "穿甲": 0, "回转": 0, "吸血": 0, "反伤": 0, "根骨": 0, "悟性": 0, "心性": 0, "魅力": 0 };
 let userBackground = "A"; // 新增：出身编码
-let textFontLevel = 2; // 新增：正文字体档位 1~5
+let textFontLevel = 2; // 正文字号档位 1~5
+let storyFontFamily = "sans"; // 正文字体（sans/kai/song）
 let uiStyle = 0; // 新增：UI风格（0=古风UI，1=扁平化UI）
 let layoutMode = 0; // 新增：屏幕方向（0=竖屏，1=横屏：视窗在左、文本区在右）
 let dayNightStatus = 'daytime';  // 新增：昼夜状况
@@ -77,8 +78,8 @@ let martialArts = {
     "太白仙迹": 0, "岱宗如何": 0, "掠风窃尘": 0, "流云飞袖": 0,
     "惊鸿照影": 0, "踏雪无痕": 0, "醉卧沙场": 0, "万剑归宗": 0
 };
-let npcFavorability = { "A": 0,"B": 0,"C": 0,"D": 0,"E": 0,"F": 0,"G": 0,"H":0,"I":0,"J":0,"K":0,"L":0 };
-let weekStartFavorability = { "A": 0,"B": 0,"C": 0,"D": 0,"E": 0,"F": 0,"G": 0,"H":0,"I":0,"J":0,"K":0,"L":0 };  // 新增：本周开始时的好感度快照
+let npcFavorability = { "A": 0,"B": 0,"C": 0,"D": 0,"E": 0,"F": 0,"G": 0,"H":0,"I":0,"J":0,"K":0,"L":0,"M":0,"N":0,"O":0,"P":0 };
+let weekStartFavorability = { "A": 0,"B": 0,"C": 0,"D": 0,"E": 0,"F": 0,"G": 0,"H":0,"I":0,"J":0,"K":0,"L":0,"M":0,"N":0,"O":0,"P":0 };  // 新增：本周开始时的好感度快照
 let actionPoints = 3;
 let currentWeek = 1;
 let GameMode = 0;  // 新增：游戏模式变量
@@ -86,9 +87,9 @@ let difficulty = 'normal';
 let cgContentEnabled = false;   // 新增：CG内容开关运行时变量（默认false）
 let compressSummary = false;    // 新增：强力总结运行时变量（默认false）
 let haveEvent = 1;              // 新增：随机事件开关（1=开，0=关，默认1）
-let npcVisibility = { "A": true,"B": true,"C": true,"D": true,"E": true,"F": true,"G": true,"H": true,"I": true,"J": true,"K": true,"L": true};
-let npcGiftGiven = { "A": false,"B": false,"C": false,"D": false,"E": false,"F": false,"G": false,"H": false,"I": false,"J": false,"K": false,"L": false};
-let npcSparred = { "A": false,"B": false,"C": false,"D": false,"E": false,"F": false,"G": false,"H": false,"I": false,"J": false,"K": false,"L": false};
+let npcVisibility = { "A": true,"B": true,"C": true,"D": true,"E": true,"F": true,"G": true,"H": true,"I": true,"J": true,"K": true,"L": true,"M": true,"N": true,"O": false,"P": true};
+let npcGiftGiven = { "A": false,"B": false,"C": false,"D": false,"E": false,"F": false,"G": false,"H": false,"I": false,"J": false,"K": false,"L": false,"M": false,"N": false,"O": false,"P": false};
+let npcSparred = { "A": false,"B": false,"C": false,"D": false,"E": false,"F": false,"G": false,"H": false,"I": false,"J": false,"K": false,"L": false,"M": false,"N": false,"O": false,"P": false};
 let alchemyDone = false;  // 新增：本周是否已炼丹
 let triggeredEvents = [];  // 新增：已触发的特殊事件ID列表
 let currentSpecialEvent = "";  // 新增：当前触发的特殊事件ID
@@ -115,6 +116,7 @@ let npcLocationL = "none";
 let npcLocationM = "danfang";
 let npcLocationN = "houshan";
 let npcLocationO = "gongtian";
+let npcLocationP = "yishiting";
 
 // 临时状态变量
 let randIdx = 0;
@@ -122,7 +124,7 @@ let currentInteractionNpc = null;
 let currentInteractionLocation = null;
 let currentRandomEvent = null;
 let currentBattleEvent = null;
-// let currentBattleType = null;
+let currentBattleType = null;
 let currentBattleReward = null;
 let currentBattleNpcName = null;
 let currentStoryText = "";
@@ -140,9 +142,8 @@ let randomEvent = 0;
 let battleEvent = 0;
 let companionNPC = [];
 let mapLocation = '天山派';
-let activeBounty = null;  // 悬赏任务：{ enemyName, locationName, level, description, reputationReward, goldReward } | null
-let lastBountyAcceptWeek = 0;  // 最近接取悬赏任务的周数（0=从未接取；每周限接1次，跨周不补额度）
-let currentBattleType = null;  // 当前战斗类型：'npc' | 'event' | 'bounty' | null，随 gameData 存档
+let activeBounty = null;
+let lastBountyAcceptWeek = 0;
 let inventory = {
     "肉包子": 5,
     "制式铁剑": 1
@@ -185,6 +186,7 @@ function syncVariablesFromGameData() {
     equipStats,
     userBackground,
     textFontLevel,
+    storyFontFamily,
     playerMood,
     martialArts,
     npcFavorability,
@@ -216,9 +218,9 @@ function syncVariablesFromGameData() {
     battleEvent,      // 新增
     companionNPC,     // 新增
     mapLocation,      // 新增
-    activeBounty,     // 新增：悬赏任务
-    lastBountyAcceptWeek, // 新增：最近接取悬赏任务的周数
-    currentBattleType, // 新增：当前战斗类型
+    activeBounty,
+    lastBountyAcceptWeek,
+    currentBattleType,
     cgContentEnabled,  // 新增
     compressSummary,
     haveEvent,         // 新增：随机事件开关
@@ -250,6 +252,7 @@ function syncVariablesFromGameData() {
     npcLocationM = currentNpcLocations.M;
     npcLocationN = currentNpcLocations.N;
     npcLocationO = currentNpcLocations.O;
+    npcLocationP = currentNpcLocations.P;
     userLocation_old = userLocation;
     randIdx = Math.floor(Math.random() * 4) + 1;
 }
@@ -274,6 +277,7 @@ function syncGameDataFromVariables() {
     gameData.npcVisibility = npcVisibility;
     gameData.npcGiftGiven = npcGiftGiven;
     gameData.textFontLevel = textFontLevel;
+    gameData.storyFontFamily = storyFontFamily;
     gameData.npcSparred = npcSparred;
     gameData.lastFarmWeek = lastFarmWeek;
     gameData.farmGrid = farmGrid;
@@ -294,9 +298,9 @@ function syncGameDataFromVariables() {
     gameData.battleEvent = battleEvent;
     gameData.companionNPC = companionNPC;
     gameData.mapLocation = mapLocation;
-    gameData.activeBounty = activeBounty;  // 新增：悬赏任务
-    gameData.lastBountyAcceptWeek = lastBountyAcceptWeek;  // 新增：最近接取悬赏任务的周数
-    gameData.currentBattleType = currentBattleType;  // 新增：当前战斗类型
+    gameData.activeBounty = activeBounty;
+    gameData.lastBountyAcceptWeek = lastBountyAcceptWeek;
+    gameData.currentBattleType = currentBattleType;
     gameData.cgContentEnabled = cgContentEnabled;  // 新增：写回存档
     gameData.compressSummary = compressSummary;    // 新增：写回存档
     gameData.haveEvent = haveEvent;                // 新增：随机事件开关

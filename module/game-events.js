@@ -493,7 +493,7 @@ function parseLLMResponse(response, mainTextContent) {
     
                     // 根据难度调整好感度变化值
                     const currentDifficulty = difficulty || 'normal';
-                    
+
                     switch (npcData.好感变化) {
                         case '大幅下降':
                             if (currentDifficulty === 'easy') {
@@ -539,7 +539,7 @@ function parseLLMResponse(response, mainTextContent) {
                             }
                             break;
                     }
-                    
+
                     let finalChangeValue = changeValue;
                     let charmMessageShown = false;
                     if (changeValue > 0) {
@@ -596,6 +596,7 @@ function parseLLMResponse(response, mainTextContent) {
                             case 'M': npcLocationM = toLocationId; break;
                             case 'N': npcLocationN = toLocationId; break;
                             case 'O': npcLocationO = toLocationId; break;
+                            case 'P': npcLocationP = toLocationId; break;
                         }
                         
                         console.log(`${npcName} 移动到 ${toLocation}`);
@@ -611,7 +612,7 @@ function parseLLMResponse(response, mainTextContent) {
     if (response.随机事件) {
         currentRandomEvent = response.随机事件;
 
-        // 悬赏战斗：保留 SIDENOTE 中 LLM 生成的长版剧情描述，
+        // 悬赏战斗：保留 SIDE_NOTE 中 LLM 生成的长版剧情描述，
         // 只以 activeBounty 为准覆盖敌方数据和报酬（保证数值与议事厅一致）
         if (currentBattleType === 'bounty' && currentRandomEvent.事件类型 === '战斗事件' && typeof activeBounty !== 'undefined' && activeBounty) {
             currentRandomEvent.敌方信息 = {
@@ -620,7 +621,6 @@ function parseLLMResponse(response, mainTextContent) {
                 属性: { 攻击力: '中', 生命力: '中', 武学: activeBounty.level },
                 战斗报酬: { 类型: '金钱', 数值: activeBounty.goldReward }
             };
-            // 如果 LLM 没有给事件描述或描述为空，兜底为精简版
             if (!currentRandomEvent.事件描述 || currentRandomEvent.事件描述.trim() === '') {
                 currentRandomEvent.事件描述 = `悬赏缉拿：${activeBounty.enemyName}`;
             }
@@ -699,6 +699,7 @@ function parseLLMResponse(response, mainTextContent) {
     console.log(`npcLocationM ${npcLocationM}`);
     console.log(`npcLocationN ${npcLocationN}`);
     console.log(`npcLocationO ${npcLocationO}`);
+    console.log(`npcLocationP ${npcLocationP}`);
     // 更新当前场景的NPC显示
     if (activeScene && activeScene.id !== 'map-scene' && 
         activeScene.id !== 'player-stats-scene' && 
@@ -766,14 +767,14 @@ function setupMessageListeners() {
                     inventory['筋骨贴'] = remaining.jingutie || 0;
                     inventory['金疮药'] = remaining.jinchuangyao || 0;
                     inventory['霹雳丸'] = remaining.piliwan || 0;
-                    
+
                     // 清理数量为0的道具
                     Object.keys(inventory).forEach(key => {
                         if (inventory[key] === 0) {
                             delete inventory[key];
                         }
                     });
-                    
+
                     console.log('[战斗-NPC切磋] 道具数量已同步:', remaining);
                 }
                 
@@ -899,7 +900,7 @@ function setupMessageListeners() {
                 
                 hideBattleEvent();
             } else if (currentBattleType === 'bounty') {
-                // 悬赏战斗结算：奖励来源固定为 activeBounty（不信任 SIDENOTE 里 LLM 自行编造的数值）
+                // 悬赏战斗结算：奖励来源固定为 activeBounty（不信任 SIDE_NOTE 里 LLM 自行编造的数值）
                 if (event.data.remainingItems) {
                     const remaining = event.data.remainingItems;
                     inventory['大力丸'] = remaining.daliwan || 0;
@@ -928,17 +929,14 @@ function setupMessageListeners() {
                     let rewardText = '';
                     let dropText = '';
 
-                    // 赏金
                     if (activeBounty && typeof activeBounty.goldReward === 'number') {
                         applyBattleReward({ 类型: '金钱', 数值: activeBounty.goldReward });
                         rewardText = `获得赏金：${activeBounty.goldReward}`;
                     }
-                    // 声望
                     if (activeBounty && typeof activeBounty.reputationReward === 'number') {
                         playerStats.声望 += activeBounty.reputationReward;
                         rewardText += (rewardText ? '<br>' : '') + `获得声望：${activeBounty.reputationReward}`;
                     }
-                    // 掉落物
                     const dropResult = generateBattleEventDrop(currentBattleEvent?.敌方信息);
                     if (dropResult && dropResult.itemName) {
                         dropText = `获得掉落：${dropResult.itemName}`;
@@ -964,7 +962,6 @@ function setupMessageListeners() {
                         showModal(modalLines);
                     }
                 } else if (result === 'defeat' || result === 'quit') {
-                    // 悬赏失败/放弃：清空任务，不可重复挑战
                     activeBounty = null;
                     lastBountyAcceptWeek = currentWeek;  // 兜底：战斗跨周结算时按结算周记额度
                     currentBattleType = null;
@@ -1122,8 +1119,7 @@ function setupMessageListeners() {
                 companionNames = npcIds.map(id => npcs[id]?.name || id).join('、');
             }
 
-            // 悬赏战斗：优先于普通"下山游历"流程处理。bountyBattle 只有 index.html 专属的
-            // bounty-service.js + 改造后的 showWorldMap() 才会产生，SR 链路不可达（详见开发文档第九节）
+            // 悬赏战斗：优先于普通"下山游历"流程处理。
             if (event.data.bountyBattle === 1 && typeof activeBounty !== 'undefined' && activeBounty) {
                 currentBattleType = 'bounty';  // 提前标记，battle-exit 时判断用
 
@@ -1148,10 +1144,6 @@ function setupMessageListeners() {
                     };
                 }
 
-                // 关键：SIDENOTE 是否输出"随机事件.战斗事件"JSON结构由全局格式规范
-                // （char_card_information/110格式规范_精简版_独立前端.txt）里的 battleEventforFormat
-                // 条件决定，读的是 gameData.battleEvent，必须在调用 handleMessageOutput 前置 1
-                // （randomEvent 置 0 避免误触发选项事件）
                 battleEvent = 1;
                 randomEvent = 0;
                 GameMode = 1;

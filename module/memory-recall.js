@@ -1156,7 +1156,7 @@ var memoryRecall = (function() {
      * @returns {{ total: number, initialized: boolean }}
      */
     function getStats() {
-        return { total: _cache.length, initialized: _initialized, totalL2: _cacheL2.length, initializedL2: _initializedL2 };
+        return { total: _cache.length, initialized: _initialized, totalL2: _cacheL2.length, initializedL2: _initializedL2, entries: _cache };
     }
 
     // =========================================================================
