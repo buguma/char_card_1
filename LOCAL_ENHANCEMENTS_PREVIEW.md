@@ -25,13 +25,34 @@
 - 正文可切换无衬线、楷体和宋体，并保留字号档位。
 - 提示词/世界书提供上游默认与四个独立本地槽位，可重命名。
 - 槽位切换按钮等宽对齐并移除暗色底板。
-- 提示词和记忆编辑保存后保持滚动位置。
+- **新增完整记忆编辑器（原项目没有此功能）**：可查看和编辑碎片日记、剧情事件、事实/角色弧光与每周总结，并支持删除、保存和切换分类。
+- 提示词和记忆编辑保存后保持各自滚动位置，不会每次操作都跳回顶部。
 - 记忆编辑标题增加白色轮廓，提高墨色背景下的可读性。
 
-### 运行时与存储
+### API、思维过程与截断控制
 
-- 保留本地的流式响应、错误修复、截断、记忆层和设置弹窗相关增强。
+- **新增“显示思考过程”开关**：接收 DeepSeek `reasoning_content` / Qwen thinking，并在正文上方实时显示，可随时关闭。
+- **新增流式截断功能**：提供主动截断、检测截断和填充等待三种模式，并与完整/轻量提交路径衔接。
+- **新增正则截断功能**：支持多组正则、最早命中、回退删除字符数、截断后追加文本和落库兜底检查。
+- **新增自定义请求头**：API 设置可填写 JSON 请求头；发送普通、流式及模型请求时统一合并，适配需要 `HTTP-Referer`、`X-Title` 等头部的中转服务。
+- 保留流式错误恢复、响应修复、截断响应轻量提交和记忆召回相关增强。
+
+### 存储与小型交互优化
+
 - 新增主角立绘全局存储接口；不随单一存档切换。
+- “恢复默认提示词”“恢复默认地点信息”和“删除世界书”等危险操作不再使用浏览器原生 `confirm()`，改为与游戏一致的水墨确认弹窗。
+- 恢复默认与删除确认支持明确的取消/确认按钮，避免误触并统一移动端视觉。
+
+## 关键实现入口
+
+| 功能 | 主要文件 |
+|---|---|
+| 记忆编辑器 | `ui/memory-editor.js`、`index.html`、`module/storage-service.js` |
+| 显示思考过程 | `module/pipeline.js`、`module/api-service.js`、`ui/prompt-manager-modal.js` |
+| 流式/正则截断 | `module/auto-truncate.js`、`module/regex-cutoff.js`、`ui/config-modal.js`、`module/pipeline.js` |
+| 自定义请求头 | `module/api-service.js`、`ui/config-modal.js` |
+| 水墨确认弹窗 | `ui/prompt-manager-modal.js` |
+| USER 自定义立绘 | `ui/user-portrait-manager.js`、`module/storage-service.js`、`module/game-ui.js`、`module/game-helpers.js` |
 
 ## 明确未包含
 
