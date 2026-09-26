@@ -349,7 +349,9 @@ var eventHistoryService = (function() {
             var trajArr = Array.isArray(c.arc.trajectory) ? c.arc.trajectory
                 : (c.arc.trajectory ? [String(c.arc.trajectory)] : []);
             var trajStr = trajArr.join(' → ');
-            // 多行结构化条目：把当前阶段从演进链中单独拆出（最新trajectory）。
+            // 多行结构化条目：把当前阶段从演进链中单独拆出（最新trajectory），消除 → 链的读法歧义；
+            // 备注与 system prompt【二、角色弧光追踪】的 progress 规则呼应：
+            // progress < 0.9 只能累加进度；>= 0.9 允许输出新 trajectory 并重置计数
             var latestTraj = trajArr.length > 0 ? trajArr[trajArr.length - 1] : '';
             var ruleHint = prgNum >= 0.9
                 ? '本轮输出新的trajectory，progress从0.00重新计数'

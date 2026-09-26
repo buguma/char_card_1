@@ -136,13 +136,15 @@ var responseParser = (function() {
         try {
             return JSON.parse(jsonText.trim());
         } catch (e) {
-            // 第二层：修复 CJK 字符之间的裸 ASCII 引号。
+            // 第二层容错：修复字符串值内部的裸 ASCII 双引号（LLM 用其表示中文引用）。
+            // 仅当引号两侧都是 CJK/中文标点时才视为字符串内引用（结构引号一侧必是 {:,[])} 等非中文字符，不会误伤）
             var INNER = '[一-鿿＀-￯　-〿，。、：；！？…—～]';
             var fixed = jsonText.trim()
                 .replace(new RegExp('(' + INNER + ')"(' + INNER + ')', 'g'), '$1」$2');
             try {
                 return JSON.parse(fixed);
             } catch (e2) {
+                // 第三层兜底：jsonrepair 尽力修复（处理截断/未闭合/全角括号等结构性残缺）
                 var repaired = window.safeParseLLMJson ? window.safeParseLLMJson(jsonText.trim(), {
                     lastKey: '剧情基调',
                     onRepaired: function (layer) {
@@ -157,22 +159,35 @@ var responseParser = (function() {
         }
     }
 
-    // 鲁棒提取 XML 标签块；容忍大小写、空格和下划线，明确区分缺失与截断。
+    /**
+     * 鲁棒提取 XML 标签块（容忍大小写、标签内外空格/下划线）
+     * @param {string} text 原始文本
+     * @param {string} tagName 标签名（如 'SUMMARY' / 'BOUNTY'，大小写不敏感）
+     * @returns {{found:boolean, closed:boolean, content:string}}
+     *   found: 是否找到开标签；closed: 是否找到闭合标签（false=截断）；content: 闭合时标签内文本
+     */
     function extractXmlBlock(text, tagName) {
         if (!text || !tagName) return { found: false, closed: false, content: '' };
+        // 把 tagName 拆成逐字符的大小写不敏感字符类，字符间允许空格/下划线
+        // 例如 SUMMARY → [Ss][\s_]*[Uu][\s_]*[Mm]...
         var chars = String(tagName).split('').map(function (ch) {
             var lower = ch.toLowerCase(), upper = ch.toUpperCase();
-            if (lower === upper) return ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            if (lower === upper) return ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // 非字母转义
             return '[' + lower + upper + ']';
         });
         var tagPattern = chars.join('[\\s_]*');
         var openRe = new RegExp('<[\\s_]*' + tagPattern + '[\\s_]*>');
         var closeRe = new RegExp('<[\\s_]*\\/[\\s_]*' + tagPattern + '[\\s_]*>');
+
         var openMatch = openRe.exec(text);
         if (!openMatch) return { found: false, closed: false, content: '' };
+
         var contentStart = openMatch.index + openMatch[0].length;
         var closeMatch = closeRe.exec(text.substring(contentStart));
-        if (!closeMatch) return { found: true, closed: false, content: '' };
+        if (!closeMatch) {
+            // 开标签在、闭合缺失 → 截断
+            return { found: true, closed: false, content: '' };
+        }
         return { found: true, closed: true, content: text.substring(contentStart, contentStart + closeMatch.index).trim() };
     }
 
