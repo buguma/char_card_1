@@ -29,13 +29,11 @@
 - 提示词和记忆编辑保存后保持各自滚动位置，不会每次操作都跳回顶部。
 - 记忆编辑标题增加白色轮廓，提高墨色背景下的可读性。
 
-### API、思维过程与截断控制
+### API 与思维过程
 
 - **新增“显示思考过程”开关**：接收 DeepSeek `reasoning_content` / Qwen thinking，并在正文上方实时显示，可随时关闭。
-- **新增流式截断功能**：提供主动截断、检测截断和填充等待三种模式，并与完整/轻量提交路径衔接。
-- **新增正则截断功能**：支持多组正则、最早命中、回退删除字符数、截断后追加文本和落库兜底检查。
 - **新增自定义请求头**：API 设置可填写 JSON 请求头；发送普通、流式及模型请求时统一合并，适配需要 `HTTP-Referer`、`X-Title` 等头部的中转服务。
-- 保留流式错误恢复、响应修复、截断响应轻量提交和记忆召回相关增强。
+- 保留上游原有的中断、流式错误恢复、响应修复与记忆召回语义。
 
 ### 存储与小型交互优化
 
@@ -49,7 +47,6 @@
 |---|---|
 | 记忆编辑器 | `ui/memory-editor.js`、`index.html`、`module/storage-service.js` |
 | 显示思考过程 | `module/pipeline.js`、`module/api-service.js`、`ui/prompt-manager-modal.js` |
-| 流式/正则截断 | `module/auto-truncate.js`、`module/regex-cutoff.js`、`ui/config-modal.js`、`module/pipeline.js` |
 | 自定义请求头 | `module/api-service.js`、`ui/config-modal.js` |
 | 水墨确认弹窗 | `ui/prompt-manager-modal.js` |
 | USER 自定义立绘 | `ui/user-portrait-manager.js`、`module/storage-service.js`、`module/game-ui.js`、`module/game-helpers.js` |
@@ -58,8 +55,9 @@
 
 - 未提交 APK、`.scene3d-work`、回滚目录、依赖缓存或本机路径配置。
 - 未提交内部工作日志和审计材料。
-- 按本地维护者要求，**未包含张天义 NPC 的新增或改写**。
-- 未直接向上游发起 PR；该分支先作为可拉取的完整参考实现。
+- 按本地维护者要求，**提供给上游的 PR 未包含张天义 NPC 的新增或改写**；本地版本继续保留该角色。
+- 历史遗留的 `auto-truncate` 与 `regex-cutoff` 截断功能已从本地和本 PR 完整删除。
+- 当前通过上游 PR #4 提供综合参考实现。
 
 ## 已执行的主要验证
 
@@ -67,7 +65,10 @@
 - 2D/3D 综合 UI 浏览器回归：4/4。
 - 设置弹窗响应式：10/10。
 - 11 个 2D 子场景与 11 个 3D 子场景按钮位置、尺寸和业务点击验证。
-- USER 立绘上传、表情回退、刷新持久化、2D/SLG 显示与 3D 隐藏验证。
+- USER 立绘上传、表情回退、IDB/降级存储、刷新持久化、2D/SLG 显示与 3D 隐藏验证。
+- 六消息越狱框架、EVENT/LOCATION/SUMMARY XML 协议及上游手动中断语义验证。
+- 自定义请求头的未保存连接测试、测试消息及 CORS Worker 转发验证。
+- 思维过程默认关闭、连续两轮样式重置验证。
 - 390×844、844×390、844×240 等视口验证。
 
 > 这是综合预览分支。若上游决定接收，建议再按“运行时/记忆”“移动端与 Scene3D UI”“USER 立绘与提示词槽位”拆成较小 PR。

@@ -880,17 +880,6 @@ var promptBuilder = (function() {
             ? PROMPT_FINAL_INSTRUCTION
             : PROMPT_FINAL_INSTRUCTION.replace(/\}$/, '\nthinking omitted}');
 
-        // 检测/填充截断模式需要在完整输出后产生 <item> 标记；保留上游六消息越狱框架，
-        // 只把附加指令注入 assistant prefill 与最终 user 指令，并纳入下方 token 预算。
-        if (typeof autoTruncate !== 'undefined' && typeof autoTruncate.getPadInstruction === 'function') {
-            var padInstruction = autoTruncate.getPadInstruction();
-            if (padInstruction) {
-                msg5Content = msg5Content.replace(/\n\}\s*$/, '\n' + padInstruction + '\n}\n');
-                msg6Content += '\n' + padInstruction;
-                console.log('[PromptBuilder] 检测/填充模式：已在六消息框架中注入 <item> 指令');
-            }
-        }
-
         // --- Token 预算管理 ---
         var budget = _getBudgetConfig();
         var totalAvailable = budget.maxContext - budget.reservedOutput;

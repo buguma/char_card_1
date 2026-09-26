@@ -102,21 +102,19 @@ function showConfigModal() {
         '<option value="non-stream"' + (config.streamMode === 'non-stream' ? ' selected' : '') + '>非流式</option>' +
         '</select></div></div>' +
 
-        // CORS 代理（所有环境均可通过勾选覆盖默认路由）
+        // CORS 代理地址（网页与 APK 均显示；勾选启用后才生效，默认 web 勾 / APK 不勾）
         '<div class="cfg-field" id="cors-proxy-field"><label class="cfg-label">CORS 代理</label>' +
-        '<label style="display:flex;align-items:center;gap:6px;margin-bottom:6px">' +
+        '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:6px">' +
         '<input type="checkbox" id="api-cors-proxy-enabled"' + (config.corsProxyEnabled ? ' checked' : '') + '>' +
-        '<span>启用 CORS 代理（勾选后通过代理中转 API 请求）</span></label>' +
+        '<span style="font-size:12px;color:rgba(55,55,55,0.7)">启用 CORS 代理（勾选后通过代理中转 API 请求）</span></label>' +
         '<input id="api-cors-proxy-input" type="text" placeholder="https://your-worker.your-name.workers.dev" value="' + _escapeHtml(config.corsProxyUrl || '') + '" class="cfg-input">' +
-        '<div class="cfg-notice" style="margin-top:4px">API 不支持 CORS 时需启用；本地 file:// 与 APK 通常直连即可。</div>' +
+        '<div class="cfg-notice" style="margin-top:4px">勾选后通过代理中转。线上部署且 API 不支持 CORS（如 OpenAI 官方）时需启用；本地 file:// 与 APK 通常直连即可（APK 默认不勾）。</div>' +
         '</div>' +
 
-        // 自定义请求头（如伪装 OpenRouter Referer 解锁受限模型）
         '<div class="cfg-field"><label class="cfg-label">自定义请求头（JSON）</label>' +
-        '<textarea id="api-custom-headers-input" class="cfg-input" rows="3" placeholder=\'{"HTTP-Referer":"https://cline.bot","X-Title":"Cline"}\' style="resize:vertical;font-family:monospace;font-size:12px">' +
+        '<textarea id="api-custom-headers-input" class="cfg-input" rows="3" placeholder=\'{"HTTP-Referer":"https://example.com","X-Title":"JXZ"}\' style="resize:vertical;font-family:monospace;font-size:12px">' +
         (config.customHeaders && Object.keys(config.customHeaders).length > 0 ? _escapeHtml(JSON.stringify(config.customHeaders, null, 2)) : '') +
-        '</textarea>' +
-        '<div class="cfg-notice" style="margin-top:2px">可选。JSON 格式的额外请求头，用于伪装请求来源（如 OpenRouter 要求特定 Referer / X-Title 才放行受限模型）。留空则不添加。</div></div>' +
+        '</textarea><div class="cfg-notice" style="margin-top:4px">用于需要 HTTP-Referer、X-Title 等头部的中转服务；保存与连接测试都会使用。</div></div>' +
 
         // 测试消息
         '<div class="cfg-field">' +
@@ -148,26 +146,6 @@ function showConfigModal() {
         '<div id="emb-status" style="font-size:12px;margin-top:6px;color:rgba(255,255,255,0.6)"></div>' +
         '<div id="emb-progress" style="font-size:12px;margin-top:4px;color:rgba(255,255,255,0.5)"></div>' +
         '</div>' +
-
-        // ===== 填充模式配置 =====
-        '<hr style="margin:12px 0;border-color:rgba(255,255,255,0.15)">' +
-        '<div class="cfg-section-title" style="font-size:13px;font-weight:600;margin-bottom:8px">⏳ 流式截断</div>' +
-        '<div class="cfg-field">' +
-        '<label style="display:flex;align-items:center;gap:6px;cursor:pointer">' +
-        '<input type="checkbox" id="at-modal-enable"' + ((typeof autoTruncate !== 'undefined' && autoTruncate.isEnabled()) ? ' checked' : '') + '>' +
-        '<span>启用截断</span></label></div>' +
-        '<div class="cfg-field">' +
-        '<label style="font-size:12px;color:rgba(255,255,255,0.6)">截断模式</label>' +
-        '<select id="at-modal-mode" class="cfg-input" style="margin-top:4px">' +
-        '<option value="abort"' + ((typeof autoTruncate !== 'undefined' && autoTruncate.getMode() === 'abort') ? ' selected' : '') + '>主动截断（</MAIN_TEXT> 后 abort）</option>' +
-        '<option value="detect"' + ((typeof autoTruncate !== 'undefined' && autoTruncate.getMode() === 'detect') ? ' selected' : '') + '>检测截断（破限 <item> 后 abort）</option>' +
-        '<option value="pad"' + ((typeof autoTruncate !== 'undefined' && autoTruncate.getMode() === 'pad') ? ' selected' : '') + '>填充等待（破限 <item> 后等超时）</option>' +
-        '</select></div>' +
-
-        // ===== 正则截断配置 =====
-        '<hr style="margin:12px 0;border-color:rgba(255,255,255,0.15)">' +
-        '<div class="cfg-section-title" style="font-size:13px;font-weight:600;margin-bottom:8px">🔪 正则截断</div>' +
-        (typeof regexCutoff !== 'undefined' ? regexCutoff.buildSettingsHtml() : '<div style="color:#888">模块未加载</div>') +
 
         // 安全提示
         '<div class="cfg-notice">⚠️ API Key 仅保存在浏览器本地，不会上传到任何服务器。请使用支持 CORS 的中转站或部署代理服务。</div>' +
@@ -208,11 +186,6 @@ function showConfigModal() {
     } else {
         modal.style.display = 'flex';
     }
-
-    // 绑定正则截断分组事件
-    if (typeof regexCutoff !== 'undefined' && typeof regexCutoff.bindModalGroupEvents === 'function') {
-        regexCutoff.bindModalGroupEvents();
-    }
 }
 
 function closeConfigModal() {
@@ -221,6 +194,18 @@ function closeConfigModal() {
         if (modal._unbindFit) modal._unbindFit();
         modal.remove();
     }
+}
+
+function _readCustomHeadersInput() {
+    var input = document.getElementById('api-custom-headers-input');
+    if (!input || !input.value.trim()) return {};
+    var parsed;
+    try { parsed = JSON.parse(input.value.trim()); }
+    catch (e) { throw new Error('自定义请求头 JSON 解析失败：' + e.message); }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('自定义请求头必须是 JSON 对象');
+    }
+    return parsed;
 }
 
 function saveConfigAndClose() {
@@ -242,34 +227,17 @@ function saveConfigAndClose() {
         presencePenalty: parseFloat(document.getElementById('api-pres-penalty-input').value),
         presencePenaltyEnabled: !!(document.getElementById('api-pres-penalty-enabled') && document.getElementById('api-pres-penalty-enabled').checked)
     };
-    // CORS 代理地址与启用开关（所有环境）
+    // CORS 代理（网页与 APK 均有此输入框与勾选框）
     var corsInput = document.getElementById('api-cors-proxy-input');
     if (corsInput) {
         newConfig.corsProxyUrl = corsInput.value.trim();
     }
     var corsEnabledInput = document.getElementById('api-cors-proxy-enabled');
-    if (corsEnabledInput) newConfig.corsProxyEnabled = !!corsEnabledInput.checked;
-    // 自定义请求头
-    var headersInput = document.getElementById('api-custom-headers-input');
-    if (headersInput) {
-        var raw = headersInput.value.trim();
-        if (raw) {
-            try {
-                var parsed = JSON.parse(raw);
-                if (typeof parsed === 'object' && !Array.isArray(parsed)) {
-                    newConfig.customHeaders = parsed;
-                } else {
-                    alert('自定义请求头格式错误：请输入 JSON 对象，如 {"HTTP-Referer":"https://cline.bot"}');
-                    return;
-                }
-            } catch (e) {
-                alert('自定义请求头 JSON 解析失败：' + e.message);
-                return;
-            }
-        } else {
-            newConfig.customHeaders = {};
-        }
+    if (corsEnabledInput) {
+        newConfig.corsProxyEnabled = !!corsEnabledInput.checked;
     }
+    try { newConfig.customHeaders = _readCustomHeadersInput(); }
+    catch (headerError) { alert(headerError.message); return; }
     if (!newConfig.endpoint || !newConfig.apiKey || !newConfig.model) {
         alert('请填写完整的 API 信息（地址、Key、模型名）');
         return;
@@ -296,20 +264,6 @@ function saveConfigAndClose() {
             eventRunner.resumeOnLoad();
         }
     }
-    // 保存流式截断配置
-    if (typeof autoTruncate !== 'undefined') {
-        var atEnable = !!(document.getElementById('at-modal-enable') && document.getElementById('at-modal-enable').checked);
-        var atMode = document.getElementById('at-modal-mode') ? document.getElementById('at-modal-mode').value : 'abort';
-        var atSettings = autoTruncate.loadSettings();
-        atSettings.enabled = atEnable;
-        atSettings.mode = atMode;
-        autoTruncate.saveSettings();
-        if (typeof autoTruncate.updateToggleUI === 'function') autoTruncate.updateToggleUI();
-    }
-    // 保存正则截断配置
-    if (typeof regexCutoff !== 'undefined') {
-        regexCutoff.saveFromModal();
-    }
     closeConfigModal();
     if (typeof showModal === 'function') showModal('API 配置已保存！');
 }
@@ -331,7 +285,8 @@ async function _doConnectTest() {
     var type = document.getElementById('api-type-select').value;
 
     try {
-        var models = await apiService.fetchModels(endpoint, apiKey, type);
+        var customHeaders = _readCustomHeadersInput();
+        var models = await apiService.fetchModels(endpoint, apiKey, type, customHeaders);
         status.textContent = '🟢 已连接（' + models.length + ' 个模型）';
         status.style.color = '#4CAF50';
 
@@ -399,6 +354,14 @@ async function _doSendTest() {
         model: document.getElementById('api-model-input').value.trim(),
         temperature: parseFloat(document.getElementById('api-temp-input').value) || 0.85
     };
+    try { tempConfig.customHeaders = _readCustomHeadersInput(); }
+    catch (headerError) {
+        resultDiv.className = 'cfg-test-result cfg-test-fail';
+        resultDiv.textContent = '❌ 测试失败: ' + headerError.message;
+        btn.disabled = false;
+        btn.textContent = '📨 发送测试消息';
+        return;
+    }
 
     var result = await apiService.sendTestMessage(tempConfig);
 
@@ -440,7 +403,12 @@ function _saveConfigHistory(cfg) {
     } catch (e) {
         domain = cfg.type || 'OpenAI';
     }
-    var label = (cfg.model || '未知模型') + ' · ' + domain;
+    // 标签加保存时间：同 endpoint+model 重复保存时只更新不新增条目，
+    // 时间戳让「已更新」在下拉框中可见（否则 label 不变，用户会误以为历史没更新）
+    var _now = new Date();
+    var _pad = function(n) { return (n < 10 ? '0' : '') + n; };
+    var timeStr = (_now.getMonth() + 1) + '-' + _pad(_now.getDate()) + ' ' + _pad(_now.getHours()) + ':' + _pad(_now.getMinutes());
+    var label = (cfg.model || '未知模型') + ' · ' + domain + ' · ' + timeStr;
     // 移除相同 endpoint+model 的旧记录（去重）
     history = history.filter(function(h) {
         return !(h.endpoint === cfg.endpoint && h.model === cfg.model);
@@ -451,7 +419,10 @@ function _saveConfigHistory(cfg) {
     if (history.length > 3) history = history.slice(0, 3);
     try {
         localStorage.setItem('jxz_apiConfigHistory', JSON.stringify(history));
-    } catch (e) {}
+    } catch (e) {
+        // 写入失败（localStorage 已满/不可用）时历史会冻结在旧数据，必须留日志便于排查
+        console.warn('[ConfigModal] 历史配置写入失败：', e);
+    }
 }
 
 function _togglePresetDropdown() {
@@ -499,13 +470,12 @@ function _applyPreset(indexStr) {
     el = document.getElementById('api-freq-penalty-enabled'); if (el) el.checked = !!preset.frequencyPenaltyEnabled;
     el = document.getElementById('api-pres-penalty-input');   if (el) el.value = preset.presencePenalty != null ? preset.presencePenalty : 0.2;
     el = document.getElementById('api-pres-penalty-enabled'); if (el) el.checked = !!preset.presencePenaltyEnabled;
-    el = document.getElementById('api-cors-proxy-input'); if (el && preset.corsProxyUrl != null) el.value = preset.corsProxyUrl;
+    el = document.getElementById('api-cors-proxy-input'); if (el && preset.corsProxyUrl) el.value = preset.corsProxyUrl;
+    // 勾选框：preset 含该字段才回填，否则保留首次渲染按环境给的默认值（web勾/APK不勾）
     el = document.getElementById('api-cors-proxy-enabled'); if (el && typeof preset.corsProxyEnabled === 'boolean') el.checked = preset.corsProxyEnabled;
-    // 自定义请求头回填
     el = document.getElementById('api-custom-headers-input');
-    if (el && preset.customHeaders && typeof preset.customHeaders === 'object' && Object.keys(preset.customHeaders).length > 0) {
-        el.value = JSON.stringify(preset.customHeaders, null, 2);
-    }
+    if (el) el.value = preset.customHeaders && typeof preset.customHeaders === 'object'
+        ? JSON.stringify(preset.customHeaders, null, 2) : '';
     // 回填完成后收起下拉
     var container = document.getElementById('api-preset-container');
     if (container) container.style.display = 'none';
@@ -564,12 +534,11 @@ async function _doRebuildEmbeddingIndex() {
         return;
     }
 
-    // 找出还没有向量的条目
-    var stats = memoryRecall.getStats();
+    // 找出还没有向量的条目；getStats() 不公开内部 entries，以持久化记录为可靠数据源。
     var cachedIds = {};
-    var cached = stats && stats.entries ? stats.entries : [];
+    var cached = storageService.loadAllEmbeddings ? storageService.loadAllEmbeddings() : [];
     for (var ci = 0; ci < cached.length; ci++) {
-        cachedIds[cached[ci].id] = true;
+        if (cached[ci] && cached[ci].id) cachedIds[cached[ci].id] = true;
     }
     var todo = all.filter(function(s) { return !cachedIds[s.id]; });
 

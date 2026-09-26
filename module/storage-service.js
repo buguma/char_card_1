@@ -127,6 +127,14 @@ var storageService = (function() {
                 // IDB 为空，尝试从 localStorage 迁移
                 await _migrateFromLocalStorage();
             }
+
+            // 兼容曾在 IDB 不可用时写入 localStorage 的主角立绘；即使主库已有其他 key 也补迁移。
+            var legacyUserPortraits = _lsGet(LS_USER_PORTRAITS);
+            if (!_cache[KEY_USER_PORTRAITS] && legacyUserPortraits && typeof legacyUserPortraits === 'object') {
+                await idbStorage.put(KEY_USER_PORTRAITS, legacyUserPortraits);
+                _cache[KEY_USER_PORTRAITS] = legacyUserPortraits;
+            }
+            if (_cache[KEY_USER_PORTRAITS]) _lsRemove(LS_USER_PORTRAITS);
         } catch (e) {
             _idbAvailable = false;
             console.warn('[Storage] IndexedDB 不可用，降级到 localStorage:', e.message || e);
@@ -674,17 +682,30 @@ var storageService = (function() {
         return value;
     }
 
-    function saveUserPortraits(data) {
+    async function saveUserPortraits(data) {
         var source = (data && typeof data === 'object') ? data : {};
+        var images = (source.images && typeof source.images === 'object') ? source.images : {};
         var value = {
             version: 1,
-            images: (source.images && typeof source.images === 'object') ? structuredClone(source.images) : {}
+            images: (typeof structuredClone === 'function') ? structuredClone(images) : JSON.parse(JSON.stringify(images))
         };
         _cache[KEY_USER_PORTRAITS] = value;
-        _idbPut(KEY_USER_PORTRAITS, value);
-        // 仅在 IndexedDB 不可用时降级写入 localStorage，避免多张图片耗尽同步存储配额。
-        if (_idbAvailable) _lsRemove(LS_USER_PORTRAITS);
-        else _lsSet(LS_USER_PORTRAITS, value);
+        if (_idbAvailable) {
+            try {
+                await idbStorage.put(KEY_USER_PORTRAITS, value);
+                _lsRemove(LS_USER_PORTRAITS);
+                return { backend: 'indexedDB' };
+            } catch (e) {
+                _logErr('put ' + KEY_USER_PORTRAITS, e);
+            }
+        }
+        // IDB 不可用或写入失败时保留降级副本；配额失败必须上抛，不能向用户假报保存成功。
+        try {
+            localStorage.setItem(LS_USER_PORTRAITS, JSON.stringify(value));
+            return { backend: 'localStorage' };
+        } catch (fallbackError) {
+            throw new Error('主角立绘持久化失败：' + (fallbackError && fallbackError.message || fallbackError));
+        }
     }
 
     // --- 全量快照（snapshot_db）---

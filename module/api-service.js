@@ -1,7 +1,7 @@
 /**
  * api-service.js - API 调用服务
  * 支持 OpenAI 兼容格式 + Gemini，流式 / 非流式。
- * 
+ *
  * 依赖：无
  */
 
@@ -124,15 +124,16 @@ var apiService = (function() {
      * 合并自定义请求头到基础请求头中。
      * 用于伪装 API 请求来源（如 OpenRouter 要求特定 Referer / X-Title 才放行受限模型）。
      * @param {object} baseHeaders - 基础请求头
+     * @param {object} [customOverride] - 测试连接时传入尚未保存的自定义请求头
      * @returns {object}
      */
-    function _buildHeaders(baseHeaders) {
+    function _buildHeaders(baseHeaders, customOverride) {
         var headers = {};
         var keys = Object.keys(baseHeaders);
         for (var i = 0; i < keys.length; i++) {
             headers[keys[i]] = baseHeaders[keys[i]];
         }
-        var custom = config.customHeaders;
+        var custom = customOverride !== undefined ? customOverride : config.customHeaders;
         if (custom && typeof custom === 'object') {
             var customKeys = Object.keys(custom);
             for (var j = 0; j < customKeys.length; j++) {
@@ -241,21 +242,21 @@ var apiService = (function() {
 
     // ========== 模型列表 ==========
 
-    async function fetchModels(endpoint, apiKey, type) {
+    async function fetchModels(endpoint, apiKey, type, customHeaders) {
         if (!endpoint || !apiKey) {
             throw new Error('请填写 API 地址和 Key');
         }
         if (type === 'gemini') {
-            return _fetchGeminiModels(endpoint, apiKey);
+            return _fetchGeminiModels(endpoint, apiKey, customHeaders);
         }
-        return _fetchOpenAIModels(endpoint, apiKey);
+        return _fetchOpenAIModels(endpoint, apiKey, customHeaders);
     }
 
-    async function _fetchOpenAIModels(endpoint, apiKey) {
+    async function _fetchOpenAIModels(endpoint, apiKey, customHeaders) {
         var url = _resolveUrl(endpoint.replace(/\/+$/, '') + '/models');
         var response = await fetch(url, {
             method: 'GET',
-            headers: _buildHeaders({ 'Authorization': 'Bearer ' + apiKey })
+            headers: _buildHeaders({ 'Authorization': 'Bearer ' + apiKey }, customHeaders)
         });
         if (!response.ok) {
             var text = '';
@@ -271,11 +272,11 @@ var apiService = (function() {
         return models;
     }
 
-    async function _fetchGeminiModels(endpoint, apiKey) {
+    async function _fetchGeminiModels(endpoint, apiKey, customHeaders) {
         var url = _resolveUrl(endpoint.replace(/\/+$/, '') + '/models?key=' + encodeURIComponent(apiKey));
         var response = await fetch(url, {
             method: 'GET',
-            headers: _buildHeaders({})
+            headers: _buildHeaders({}, customHeaders)
         });
         if (!response.ok) {
             var text = '';
@@ -320,7 +321,7 @@ var apiService = (function() {
             headers: _buildHeaders({
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer ' + cfg.apiKey
-            }),
+            }, cfg.customHeaders),
             body: JSON.stringify({
                 model: cfg.model,
                 messages: messages,
@@ -344,7 +345,7 @@ var apiService = (function() {
         var url = cfg.endpoint.replace(/\/+$/, '') + '/models/' + cfg.model + ':generateContent?key=' + encodeURIComponent(cfg.apiKey);
         var response = await fetch(url, {
             method: 'POST',
-            headers: _buildHeaders({ 'Content-Type': 'application/json' }),
+            headers: _buildHeaders({ 'Content-Type': 'application/json' }, cfg.customHeaders),
             body: JSON.stringify({
                 contents: contents,
                 generationConfig: { temperature: cfg.temperature || 0.85, maxOutputTokens: 100 }

@@ -42,9 +42,11 @@ var userPortraitManager = (function() {
         };
     }
 
-    function _save(state) {
-        if (typeof storageService === 'undefined' || !storageService.saveUserPortraits) return;
-        storageService.saveUserPortraits(state);
+    async function _save(state) {
+        if (typeof storageService === 'undefined' || !storageService.saveUserPortraits) {
+            throw new Error('存储服务尚未就绪');
+        }
+        return storageService.saveUserPortraits(state);
     }
 
     function _cleanToken(value) {
@@ -193,7 +195,7 @@ var userPortraitManager = (function() {
                 bytes: encoded.bytes,
                 updatedAt: Date.now()
             };
-            _save(state);
+            await _save(state);
             render(document.getElementById('user-portrait-manager-root'));
             _notifyChanged();
             if (typeof showModal === 'function') showModal('主角“' + _esc(expression) + '”立绘已保存');
@@ -203,13 +205,17 @@ var userPortraitManager = (function() {
     }
 
     function remove(expression) {
-        var perform = function() {
-            var state = _state();
-            var images = Object.assign({}, state.images);
-            delete images[expression];
-            _save({ version: 1, images: images });
-            render(document.getElementById('user-portrait-manager-root'));
-            _notifyChanged();
+        var perform = async function() {
+            try {
+                var state = _state();
+                var images = Object.assign({}, state.images);
+                delete images[expression];
+                await _save({ version: 1, images: images });
+                render(document.getElementById('user-portrait-manager-root'));
+                _notifyChanged();
+            } catch (error) {
+                if (typeof showModal === 'function') showModal(error && error.message ? error.message : String(error));
+            }
         };
         if (typeof showConfirmModal === 'function') {
             showConfirmModal('删除主角立绘', '确定删除“' + _esc(expression) + '”立绘吗？', perform);

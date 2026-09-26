@@ -442,7 +442,7 @@ var promptManagerModal = (function() {
      */
     function _pmThinkToggle() {
         var STORAGE_KEY = 'jxz_showThinking';
-        var enabled = true;
+        var enabled = false;
         try {
             var saved = localStorage.getItem(STORAGE_KEY);
             if (saved !== null) enabled = saved === 'true';
@@ -466,6 +466,13 @@ var promptManagerModal = (function() {
         window._showThinkingEnabled = enabled;
         var hint = document.getElementById('gs-thinking-hint');
         if (hint) hint.textContent = enabled ? '开' : '关';
+        if (!enabled) {
+            var display = document.getElementById('story-thinking');
+            if (display) {
+                display.style.display = 'none';
+                display.textContent = '';
+            }
+        }
     }
 
     // --- 下拉框选中后打开编辑弹窗 ---

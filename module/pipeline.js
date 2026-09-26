@@ -2,8 +2,8 @@
  * pipeline.js - 单轮消息处理流水线（两阶段设计）
  * Phase 1 核心：请求阶段无副作用 + 提交阶段可回滚
  * Phase 2：流式 SSE 支持 + 节流渲染
- * 
- * 依赖：api-service, prompt-builder, response-parser, 
+ *
+ * 依赖：api-service, prompt-builder, response-parser,
  *        variable-system, summary-history-service, storage-service
  */
 
@@ -647,14 +647,19 @@ var pipeline = (function() {
 
         _hideStreamControls();
 
-        // 中断/截断时：判定内容完整性，完整则走完整提交
+        // 中断时不提交副作用，只保留已渲染的文本
         if (wasAborted) {
-            if (_isStructurallyComplete(rawText)) {
-                console.log('[Pipeline] 截断但内容完整（所有标签齐全），执行完整提交...');
-                await _commitResponse(preprocessed, rawText, isRegenerate);
-            } else {
-                console.log('[Pipeline] 中断/截断路径（内容不完整），执行轻量提交...');
-                await _commitAbortedTurn(preprocessed, rawText);
+            console.log('[Pipeline] 用户中断，跳过提交阶段');
+            // 对齐 SR：中断也相当于本轮结束，重置临时标记
+            enamor = 0;
+            randomEvent = 0;
+            battleEvent = 0;
+            gameData.enamor = 0;
+            gameData.randomEvent = 0;
+            gameData.battleEvent = 0;
+            console.log('[Pipeline][DEBUG] 中断路径：事件变量已归零');
+            if (typeof showModal === 'function' && typeof isInRenderEnvironment === 'function' && !isInRenderEnvironment()) {
+                showModal('本轮输出已中断，未自动存档，建议重新生成。');
             }
             return;
         }
@@ -695,7 +700,7 @@ var pipeline = (function() {
                 }
             }
 
-            var callbacks = {
+            var handle = apiService.sendMessagesStream(messages, {
                 onToken: function(delta) {
                     if (accumulatedText === '') {
                         _setStreamLog('施延年伏案疾书');
@@ -710,10 +715,8 @@ var pipeline = (function() {
                     }
                 },
                 onThinking: function(delta) {
-                    // 累积思维链内容（DeepSeek/Qwen 的 reasoning_content 字段）
-                    if (accumulatedThinking === '') {
-                        _setStreamLog('施延年蹙眉沉吟');
-                    }
+                    // 累积并按设置实时展示 DeepSeek/Qwen 思维过程。
+                    if (accumulatedThinking === '') _setStreamLog('施延年蹙眉沉吟');
                     accumulatedThinking += delta;
                     _showThinkingText(delta);
                 },
@@ -746,31 +749,7 @@ var pipeline = (function() {
                         resolve({ text: text, aborted: _abortRequested });
                     }).catch(reject);
                 }
-            };
-
-            // 自动截断包装（如果启用）
-            if (typeof autoTruncate !== 'undefined' && autoTruncate.isEnabled()) {
-                callbacks = autoTruncate.createStreamWrapper(callbacks, 0);
-                console.log('[Pipeline] 已启用自动截断包装');
-            }
-
-            // 正则截断包装（如果启用，包在最外层优先检测）
-            if (typeof regexCutoff !== 'undefined' && regexCutoff.isEnabled()) {
-                callbacks = regexCutoff.createStreamWrapper(callbacks, 0);
-                console.log('[Pipeline] 已启用正则截断包装');
-            }
-
-            // 检测/填充模式下取消 max_tokens 限制，让模型无限输出直到中转站断流
-            var streamOpts = null;
-            if (typeof autoTruncate !== 'undefined' && autoTruncate.isEnabled()) {
-                var atMode = autoTruncate.getMode();
-                if (atMode === 'detect' || atMode === 'pad') {
-                    streamOpts = { maxOutputTokens: null };
-                    console.log('[Pipeline] 检测/填充模式：取消 max_tokens 限制');
-                }
-            }
-
-            var handle = apiService.sendMessagesStream(messages, callbacks, streamOpts);
+            });
 
             _currentAbort = handle;
         });
@@ -809,111 +788,6 @@ var pipeline = (function() {
                 return '';
             }
             throw err;
-        }
-    }
-
-    /**
-     * 判定 LLM 回复是否结构完整（所有必要标签均闭合）
-     * 用于截断场景：若内容已完整输出，abort 后可走完整提交流程
-     */
-    function _isStructurallyComplete(text) {
-        if (!text) return false;
-        return text.indexOf('</MAIN_TEXT>')  !== -1
-            && text.indexOf('<SUMMARY>')     !== -1
-            && text.indexOf('</SUMMARY>')    !== -1
-            && text.indexOf('<SIDE_NOTE>')   !== -1
-            && text.indexOf('</SIDE_NOTE>')  !== -1
-            && text.indexOf('</SLG_MODE>')   !== -1;
-    }
-
-    /**
-     * 轻量提交（中断/截断路径专用）
-     * 在 <SUMMARY 处截断，只保留 MAIN_TEXT；NPC位置从正文标注提取
-     */
-    async function _commitAbortedTurn(preprocessed, rawText) {
-        try {
-            // 0. 清洗文本：去除 &lt;ANAL_for_JXZ&gt; / &lt;thinking&gt; 等思考标签
-            var displayText = rawText;
-            if (typeof responseParser !== 'undefined' && typeof responseParser.removeThinkingContent === 'function') {
-                displayText = responseParser.removeThinkingContent(rawText);
-            }
-
-            // 1. 写入用户消息到 UI 历史
-            storageService.appendUIConversation({
-                id: 'u' + Date.now(),
-                role: 'user',
-                content: preprocessed,
-                week: currentWeek,
-                createdAt: Date.now()
-            });
-
-            // 2. 尝试解析 AI 回复（可能不完整，尽力而为）
-            var parsed = null;
-            try {
-                parsed = responseParser.run(rawText);
-            } catch (parseErr) {
-                console.warn('[Pipeline] 截断响应解析失败:', parseErr.message);
-            }
-
-            // 3. 解析并应用 SIDE_NOTE；若无则从正文标注提取 NPC 位置
-            if (parsed) {
-                _applyParsedSideNote(parsed);
-                _applySummaryUpdate(parsed);
-                if (!parsed.sideNote) {
-                    _extractNpcPositionsFromMainText(parsed.mainText);
-                }
-            }
-
-            // 4. 同步 gameData
-            syncGameDataFromVariables();
-
-            // 5. 重置事件标记
-            enamor = 0;
-            randomEvent = 0;
-            battleEvent = 0;
-            gameData.enamor = 0;
-            gameData.randomEvent = 0;
-            gameData.battleEvent = 0;
-
-            // 6. 写入 AI 回复到 UI 历史（用 parsed.mainText，避免 SIDE_NOTE 标签漏到正文）
-            var displayContent = (parsed && parsed.mainText) ? parsed.mainText : displayText;
-            storageService.appendUIConversation({
-                id: 'a' + Date.now(),
-                role: 'assistant',
-                content: displayContent,
-                week: currentWeek,
-                createdAt: Date.now()
-            });
-
-            // 7. 刷新场景（NPC 位置可能已变）
-            if (typeof checkAllValueRanges === 'function') checkAllValueRanges();
-            if (typeof calculateSeason === 'function') {
-                var newSeason = calculateSeason(currentWeek);
-                if (newSeason !== seasonStatus) seasonStatus = newSeason;
-            }
-            if (typeof updateSceneBackgrounds === 'function') updateSceneBackgrounds();
-            if (typeof displayNpcs === 'function') {
-                var activeScene = document.querySelector('.scene.active');
-                if (activeScene && activeScene.id !== 'map-scene') displayNpcs(activeScene.id.replace('-scene', ''));
-            }
-
-            // 8. 持久化
-            storageService.saveAppState({ gameData: gameData });
-
-            // 9. 触发自动存档（截断场景照样存）
-            if (typeof autoSave === 'function') autoSave();
-
-            // 10. 最终渲染（用 parsed.mainText，避免 SIDE_NOTE 标签漏到正文）
-            if (typeof renderMainText === 'function' && displayContent) renderMainText(displayContent);
-            if (typeof updateAllDisplays === 'function') updateAllDisplays();
-            if (typeof updateFreeActionInputState === 'function') updateFreeActionInputState();
-
-            console.log('[Pipeline] 轻量提交完成（截断路径）');
-        } catch (err) {
-            console.error('[Pipeline] 轻量提交失败:', err.message);
-            if (typeof showModal === 'function') {
-                showModal('截断保存异常，建议刷新页面重新生成。');
-            }
         }
     }
 
@@ -1020,12 +894,14 @@ var pipeline = (function() {
                         }
                         var _buffSlice = _uiConvNow.slice(_oldIdx).filter(function(m) { return m.role === 'assistant'; });
                         var _turnCount = _buffSlice.length;
-                        // 同一楼层可能对应多条小总结；缺失时回退该楼正文。
-                        var _sumByUIid = Object.create(null);
+
+                        // 楼层 → 摘要映射：按 UIid 把 summaryHistory 分组（同一楼 assistant 可能有多条摘要，全部拼接）
+                        // 周总结请求注入缩略内容替代原文，压缩 prompt 体积；找不到对应摘要的楼层回退原文
+                        var _sumByUIid = {};
                         if (typeof summaryHistoryService !== 'undefined' && summaryHistoryService.getAll) {
-                            var _buffSummaries = summaryHistoryService.getAll() || [];
-                            for (var _si = 0; _si < _buffSummaries.length; _si++) {
-                                var _rec = _buffSummaries[_si];
+                            var _allSum = summaryHistoryService.getAll() || [];
+                            for (var _si = 0; _si < _allSum.length; _si++) {
+                                var _rec = _allSum[_si];
                                 if (!_rec || !_rec.UIid || !_rec.summaryText) continue;
                                 if (!_sumByUIid[_rec.UIid]) _sumByUIid[_rec.UIid] = [];
                                 _sumByUIid[_rec.UIid].push(_rec.summaryText);
@@ -1105,7 +981,10 @@ var pipeline = (function() {
                     try {
                         var allAfter = summaryHistoryService.getAll();
                         // 找出还没有 embedding 的条目
-                        // getStats() 不返回 entries；以已持久化的 emb_ 记录判定，避免重复向量化历史。
+                        // 注：memoryRecall.getStats() 只返回 {total,initialized,...}，不含 entries 列表，
+                        // 不能用它判断"哪些id已缓存"（曾误用导致 cachedIds 恒为空，把整个 summaryHistory
+                        // 当作"新增"重新 embed，历史一多就会撑爆 embedding API 的单请求 token 上限）。
+                        // 改用与 _syncEmbeddingsWithSummaryHistory 相同的可靠数据源：已持久化的 emb_ 记录。
                         var embRecords = storageService.loadAllEmbeddings();
                         var cachedIds = {};
                         for (var ci = 0; ci < embRecords.length; ci++) {
@@ -1124,7 +1003,7 @@ var pipeline = (function() {
 
                         var vectors = await embeddingService.embed(embedTexts);
                         if (!vectors) {
-                            throw new Error('embed 返回空（可能是请求体过大或API错误，详见 [EmbeddingService] 日志）');
+                            throw new Error('embed 返回空（可能是请求体过大或API错误，详见上方 [EmbeddingService] 日志）');
                         }
 
                         var fp = embeddingService.getFingerprint();
@@ -1167,11 +1046,13 @@ var pipeline = (function() {
                 setTimeout(function() { eventRunner.maybeSchedule(); }, 0);
             }
             // 触发自动存档（仅独立前端，函数由 index.html 定义）
-            // 即使 SIDE_NOTE 解析失败也存档（截断场景），只提示不跳过
-            if (typeof autoSave === 'function') {
+            // 仅在 SIDE_NOTE 成功解析时才存档，截断响应跳过
+            if (typeof autoSave === 'function' && parsed.sideNote !== null) {
                 autoSave();
-                if (parsed.sideNote === null) {
-                    console.warn('[Pipeline] SIDE_NOTE 解析失败，但对话记录已保存');
+            } else if (typeof autoSave === 'function') {
+                console.log('[Pipeline] 跳过自动存档：SIDE_NOTE 解析失败，响应可能被截断');
+                if (typeof showModal === 'function') {
+                    showModal('本次回复内容格式不完整，自动存档已跳过，建议重新生成。');
                 }
             }
             // 每轮完成后刷新按钮状态（重生成按钮依赖 hasSnapshot，初始化时快照为空会被禁用）
@@ -1265,7 +1146,6 @@ var pipeline = (function() {
     function _hideStreamMask() {
         var mask = document.getElementById('stream-mask');
         if (mask) mask.classList.remove('active');
-        _thinkingVisible = false;
         _setStreamLog('');
     }
 
@@ -1289,63 +1169,47 @@ var pipeline = (function() {
         el.textContent = text || '';
     }
 
-    // 思维链可见标记
-    /**
-     * 确保思维链展示区存在于正文容器上方（懒创建，不在遮罩内）
-     */
-    function _ensureThinkingDisplay() {
-        var el = document.getElementById('story-thinking');
-        if (el) return el;
-        var storyArea = document.getElementById('story-text');
-        if (!storyArea) return null;
-        el = document.createElement('div');
-        el.id = 'story-thinking';
-        el.style.cssText = 'margin:0 8px 8px;padding:6px 10px;font-size:var(--story-font-size,15px);line-height:1.8;color:var(--story-color,#ccc);font-style:italic;text-align:left;white-space:pre-wrap;word-break:break-word;display:none;transition:max-height 0.4s,opacity 0.4s;';
-        storyArea.parentNode.insertBefore(el, storyArea);
-        return el;
-    }
-
     var _thinkingVisible = false;
+    var _thinkingHideTimer = null;
 
-    /**
-     * 检查是否启用思维链显示（提示词管理 → 显示思考过程 开关）
-     */
     function _isThinkingEnabled() {
         try {
-            // 优先读取 promptManagerModal 实时设置
             if (typeof window._showThinkingEnabled === 'boolean') return window._showThinkingEnabled;
-            // 回退 localStorage
             var saved = localStorage.getItem('jxz_showThinking');
             if (saved !== null) return saved === 'true';
         } catch (e) {}
-        return true; // 默认开启
+        return false; // 新安装保持上游默认行为，由用户主动开启。
     }
 
-    /**
-     * 追加思维链内容到 UI（DeepSeek reasoning_content / Qwen thinking）
-     * 首次调用时展开显示区域，后续追加文本
-     */
+    function _ensureThinkingDisplay() {
+        var el = document.getElementById('story-thinking');
+        if (el) return el;
+        var story = document.getElementById('story-text');
+        if (!story || !story.parentNode) return null;
+        el = document.createElement('div');
+        el.id = 'story-thinking';
+        el.style.cssText = 'margin:0 8px 8px;padding:6px 10px;font-size:var(--story-font-size,15px);line-height:1.8;color:var(--story-color,#ccc);font-style:italic;text-align:left;white-space:pre-wrap;word-break:break-word;display:none;transition:max-height .4s,opacity .4s;';
+        story.parentNode.insertBefore(el, story);
+        return el;
+    }
+
     function _showThinkingText(delta) {
-        // 检查开关（提示词管理 → 显示思考过程）
-        if (!_isThinkingEnabled()) return;
+        if (!_isThinkingEnabled() || !delta) return;
         var el = _ensureThinkingDisplay();
         if (!el) return;
         if (!_thinkingVisible) {
+            if (_thinkingHideTimer) clearTimeout(_thinkingHideTimer);
+            _thinkingHideTimer = null;
             el.style.display = 'block';
+            el.style.maxHeight = 'none';
+            el.style.opacity = '1';
+            el.style.overflowY = 'auto';
             el.textContent = '';
             _thinkingVisible = true;
         }
-        // 限制最大长度 3000 字，防止过长拖慢渲染
-        var current = el.textContent || '';
+        var combined = (el.textContent || '') + delta;
         var maxLen = 3000;
-        if (current.length + delta.length > maxLen) {
-            var combined = current + delta;
-            var keepStart = Math.max(0, combined.length - maxLen);
-            el.textContent = '…' + combined.slice(keepStart + 1);
-        } else {
-            el.textContent = current + delta;
-        }
-        // 自动滚到底部
+        el.textContent = combined.length > maxLen ? '…' + combined.slice(combined.length - maxLen + 1) : combined;
         el.scrollTop = el.scrollHeight;
     }
 
@@ -1356,12 +1220,11 @@ var pipeline = (function() {
         el.style.opacity = '0.45';
         el.style.overflow = 'hidden';
         _thinkingVisible = false;
-        // 正文输出完毕后折叠，3 秒后彻底从故事区移除
-        setTimeout(function() {
-            var e2 = document.getElementById('story-thinking');
-            if (e2 && e2.style.maxHeight === '4em') {
-                e2.style.display = 'none';
-            }
+        if (_thinkingHideTimer) clearTimeout(_thinkingHideTimer);
+        _thinkingHideTimer = setTimeout(function() {
+            _thinkingHideTimer = null;
+            var current = document.getElementById('story-thinking');
+            if (current && !_thinkingVisible) current.style.display = 'none';
         }, 3000);
     }
 
@@ -1399,82 +1262,6 @@ var pipeline = (function() {
             }
         } catch (e) {
             console.warn('应用 SIDE_NOTE 失败', e);
-        }
-    }
-
-    /**
-     * 从 MAIN_TEXT 段落标注中提取 NPC 位置（SIDE_NOTE 缺失时的 fallback）
-     * 正文格式：段落正文|NPC名|场景名|NPC表情|none
-     */
-    function _extractNpcPositionsFromMainText(mainText) {
-        if (!mainText) return;
-        if (typeof npcNameToId === 'undefined' || typeof locationNames === 'undefined') return;
-
-        var lines = mainText.split('\n');
-        var updatedNpcs = {};
-        var updatedUserLoc = null;
-
-        for (var i = 0; i < lines.length; i++) {
-            var line = lines[i].trim();
-            // 匹配段落标注：正文|NPC名|场景名|... 或 正文｜NPC名｜场景名｜...
-            var parts = line.split(/[|｜]/);
-            if (parts.length < 3) continue;
-
-            var npcName = parts[1].trim();
-            var sceneName = parts[2].trim();
-
-            if (npcName === 'none' || sceneName === 'none') continue;
-
-            // 查找 NPC ID
-            var npcId = npcNameToId[npcName];
-            if (!npcId) continue;
-
-            // 查找场景 ID
-            var locId = null;
-            for (var locKey in locationNames) {
-                if (locationNames[locKey] === sceneName) {
-                    locId = locKey;
-                    break;
-                }
-            }
-            if (!locId) continue;
-
-            if (!updatedNpcs[npcId]) {
-                updatedNpcs[npcId] = locId;
-                console.log('[Fallback] 从正文标注提取 NPC 位置: ' + npcName + ' → ' + sceneName + ' (' + locId + ')');
-            }
-            // 记录最后一个有效场景作为可能的用户位置
-            updatedUserLoc = locId;
-        }
-
-        // 应用提取的 NPC 位置
-        var updated = false;
-        for (var nid in updatedNpcs) {
-            currentNpcLocations[nid] = updatedNpcs[nid];
-            // 同步到独立变量
-            switch (nid) {
-                case 'A': npcLocationA = updatedNpcs[nid]; break;
-                case 'B': npcLocationB = updatedNpcs[nid]; break;
-                case 'C': npcLocationC = updatedNpcs[nid]; break;
-                case 'D': npcLocationD = updatedNpcs[nid]; break;
-                case 'E': npcLocationE = updatedNpcs[nid]; break;
-                case 'F': npcLocationF = updatedNpcs[nid]; break;
-                case 'G': npcLocationG = updatedNpcs[nid]; break;
-                case 'H': npcLocationH = updatedNpcs[nid]; break;
-                case 'I': npcLocationI = updatedNpcs[nid]; break;
-                case 'J': npcLocationJ = updatedNpcs[nid]; break;
-                case 'K': npcLocationK = updatedNpcs[nid]; break;
-                case 'L': npcLocationL = updatedNpcs[nid]; break;
-                case 'M': npcLocationM = updatedNpcs[nid]; break;
-                case 'N': npcLocationN = updatedNpcs[nid]; break;
-                case 'O': npcLocationO = updatedNpcs[nid]; break;
-                case 'P': npcLocationP = updatedNpcs[nid]; break;
-            }
-            updated = true;
-        }
-
-        if (updated) {
-            console.log('[Fallback] 从正文标注更新了 ' + Object.keys(updatedNpcs).length + ' 个NPC位置');
         }
     }
 
@@ -1548,17 +1335,17 @@ var pipeline = (function() {
             console.error('[Pipeline] 特殊事件对象无效');
             return;
         }
-        
+
         console.log('[Pipeline] 处理特殊事件:', event.name);
-        
+
         try {
             _showStreamControls();
             _setStreamLog('施延年灵光乍现');
-            
+
             // 模拟思考延迟
             await new Promise(function(resolve) { setTimeout(resolve, 600); });
             _setStreamLog('施延年题尾落款');
-            
+
             // 替换 {{user}} 为主角名字
             var playerName = (typeof gameData !== 'undefined' && gameData.playerName) ? gameData.playerName : '主角';
             var eventText = event.text.replace(/\{\{user\}\}/g, playerName);
@@ -1591,7 +1378,7 @@ var pipeline = (function() {
                     (_npcNames ? '随行NPC：' + _npcNames + '<br>' : '');
                 resolvedUserMessage = _prefix + resolvedUserMessage;
             }
-            
+
             // 走完整的提交流程（解析SUMMARY、SIDE_NOTE、渲染、保存）
             // 标记本次摘要来源为特殊剧情事件
             _currentSummarySource = 'special_event';
@@ -1602,9 +1389,9 @@ var pipeline = (function() {
             if (typeof updateFreeActionInputState === 'function') {
                 updateFreeActionInputState();
             }
-            
+
             _hideStreamControls();
-            
+
             console.log('[Pipeline] 特殊事件处理完成');
         } catch (error) {
             _hideStreamControls();
@@ -1629,9 +1416,9 @@ var pipeline = (function() {
             }
         }
     }
-    return { 
+    return {
         runTurn: function() { return withSceneGuard(runTurn, arguments); },
-        abortCurrentTurn: abortCurrentTurn, 
+        abortCurrentTurn: abortCurrentTurn,
         isStreaming: isStreaming,
         handleSpecialEvent: function() { return withSceneGuard(handleSpecialEvent, arguments); }
     };
