@@ -3607,7 +3607,7 @@ body.ui-style-flat .cfg-notice {
 body.ui-style-flat .cfg-footer { border-top-color: #e0e0e0; }
 
 
-/* ========== ��Ϸ���õ�����game-settings-modal�� ========== */
+/* ========== 游戏设置弹窗（game-settings-modal） ========== */
 .gs-modal-content {
     display: flex;
     flex-direction: column;
@@ -3627,7 +3627,7 @@ body.ui-style-flat .cfg-footer { border-top-color: #e0e0e0; }
     overflow: hidden;
 }
 
-/* ���ѡ��� */
+/* 左侧选项卡 */
 .gs-tabs {
     display: flex;
     flex-direction: column;
@@ -3703,7 +3703,7 @@ body.ui-style-flat .cfg-footer { border-top-color: #e0e0e0; }
     .pl-tab { font-size: 12px; padding: 8px 4px; }
 }
 
-/* �Ҳ������� */
+/* 右侧内容区域 */
 .gs-panel-wrap {
     flex: 1;
     overflow-y: auto;
@@ -3746,7 +3746,7 @@ body.ui-style-flat .cfg-footer { border-top-color: #e0e0e0; }
     .gs-recall-tokens { width: 60px; }
 }
 
-/* ������ */
+/* 设置项行 */
 .gs-switch-row {
     display: flex;
     align-items: center;
@@ -3764,7 +3764,7 @@ body.ui-style-flat .cfg-footer { border-top-color: #e0e0e0; }
     min-width: 0;
 }
 
-/* Toggle ���� */
+/* Toggle 开关 */
 .gs-toggle-wrap {
     display: flex;
     align-items: center;
@@ -3823,7 +3823,7 @@ body.ui-style-flat .cfg-footer { border-top-color: #e0e0e0; }
     text-align: right;
 }
 
-/* Range ���� */
+/* Range 滑杆 */
 .gs-range {
     -webkit-appearance: none;
     width: 100%;

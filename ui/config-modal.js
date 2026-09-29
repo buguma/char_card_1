@@ -537,8 +537,9 @@ async function _doRebuildEmbeddingIndex() {
     // 找出还没有向量的条目；getStats() 不公开内部 entries，以持久化记录为可靠数据源。
     var cachedIds = {};
     var cached = storageService.loadAllEmbeddings ? storageService.loadAllEmbeddings() : [];
+    var fp = embeddingService.getFingerprint();
     for (var ci = 0; ci < cached.length; ci++) {
-        if (cached[ci] && cached[ci].id) cachedIds[cached[ci].id] = true;
+        if (cached[ci] && cached[ci].id && cached[ci].fingerprint === fp) cachedIds[cached[ci].id] = true;
     }
     var todo = all.filter(function(s) { return !cachedIds[s.id]; });
 
@@ -549,7 +550,6 @@ async function _doRebuildEmbeddingIndex() {
 
     var batchSize = 10;
     var done = 0;
-    var fp = embeddingService.getFingerprint();
 
     try {
         for (var i = 0; i < todo.length; i += batchSize) {

@@ -578,8 +578,8 @@ function shouldUseTianshanStoryPortraits(location, pageState) {
 
 function _storySpeakerPortraitId(name) {
     if (name === 'user') {
-        return (typeof userPortraitManager !== 'undefined' && userPortraitManager.hasPortrait())
-            ? USER_PORTRAIT_ID : null;
+        return (typeof userPortraitManager !== 'undefined' && userPortraitManager.isDisplayEnabled
+            && userPortraitManager.isDisplayEnabled()) ? USER_PORTRAIT_ID : null;
     }
     return (typeof npcNameToId !== 'undefined') ? npcNameToId[name] : null;
 }

@@ -608,6 +608,7 @@
                 <div class="gs-layout">
                     <!-- 左侧选项卡列 -->
                     <div class="gs-tabs" id="gs-tabs">
+                        <button class="gs-tab" data-tab="workspace" onclick="gsSelectTab('workspace')">存档切换</button>
                         <button class="gs-tab active" data-tab="switches" onclick="gsSelectTab('switches')">通用设置</button>
                         <button class="gs-tab" data-tab="difficulty" onclick="gsSelectTab('difficulty')">难度设置</button>
                         <button class="gs-tab" data-tab="summary" onclick="gsSelectTab('summary')">总结管理</button>
@@ -618,6 +619,11 @@
                     </div>
                     <!-- 右侧内容区 -->
                     <div class="gs-panel-wrap">
+                        <!-- Workspace 存档切换 -->
+                        <div class="gs-panel" id="gs-panel-workspace">
+                            <h3>存档切换</h3>
+                            <div id="workspace-manager-root"></div>
+                        </div>
                         <!-- 通用设置 -->
                         <div class="gs-panel active" id="gs-panel-switches">
                             <h3>通用设置</h3>
@@ -1356,6 +1362,7 @@
     <script src="ui/prompt-manager-modal.js"></script>
     <script src="ui/memory-editor.js"></script>
     <script src="ui/user-portrait-manager.js"></script>
+    <script src="ui/workspace-manager.js"></script>
     <script src="module/bgm-manager.js"></script>
     <script src="module/scene3d-bridge.js"></script>
 
@@ -3291,9 +3298,11 @@ const outPut = `
                 syncGameDataFromVariables();
                 // 独立前端专用：将当前活跃事件存入存档
                 gameData._activeEvent = currentRandomEvent || currentBattleEvent || null;
-                storageService.createSave(saveName);
+                var workspaceId = (typeof workspaceManager !== 'undefined') ? workspaceManager.getActiveId() : storageService.getActiveWorkspaceId();
+                storageService.createSave(saveName, workspaceId);
                 delete gameData._activeEvent;
-                showModal('存档成功！<br>存档名称：' + saveName);
+                if (typeof workspaceManager !== 'undefined') await workspaceManager.saveCurrentHead({ quiet: true });
+                showModal('存档成功！<br>存档位：' + workspaceId + '<br>存档名称：' + saveName);
                 toggleDropdown('system-dropdown');
                 return;
             }
@@ -3338,8 +3347,11 @@ const outPut = `
             }
     }
     function showSaveListModal() {
-    var saves = storageService.listSaves();
-    var html = '<div id="save-list-modal" class="modal viewport-overlay" style="display:block;"><div class="modal-content" style="max-width:500px;"><h3>存档管理</h3>';
+    var workspaceId = (typeof workspaceManager !== 'undefined') ? workspaceManager.getActiveId() : storageService.getActiveWorkspaceId();
+    var saves = storageService.listSaves(workspaceId);
+    var workspaceMeta = storageService.loadWorkspaceMeta ? storageService.loadWorkspaceMeta(workspaceId) : null;
+    var workspaceName = workspaceMeta && workspaceMeta.name ? workspaceMeta.name : workspaceId;
+    var html = '<div id="save-list-modal" class="modal viewport-overlay" style="display:block;"><div class="modal-content" style="max-width:500px;"><h3>存档管理 · ' + _escapeHtml(workspaceName) + '</h3>';
     if (saves.length === 0) {
         html += '<p style="text-align:center;color:#888;margin:20px 0;">暂无存档</p>';
     } else {
@@ -3377,11 +3389,12 @@ function autoSave() {
         syncGameDataFromVariables();
         gameData._activeEvent = currentRandomEvent || currentBattleEvent || null;
         var saveName = AUTO_SAVE_PREFIX + buildSaveName();
-        storageService.createSave(saveName);
+        var workspaceId = (typeof workspaceManager !== 'undefined') ? workspaceManager.getActiveId() : storageService.getActiveWorkspaceId();
+        storageService.createSave(saveName, workspaceId);
         delete gameData._activeEvent;
 
-        // FIFO：超出上限时删除最老的自动存档
-        var all = storageService.listSaves();
+        // FIFO：每个 Workspace 各自最多保留3个自动存档。
+        var all = storageService.listSaves(workspaceId);
         var autoSlots = all.filter(function(s) {
             return s.saveName && s.saveName.indexOf(AUTO_SAVE_PREFIX) === 0;
         }).sort(function(a, b) { return a.createdAt - b.createdAt; });
@@ -3390,7 +3403,10 @@ function autoSave() {
             storageService.deleteSave(autoSlots[0].id);
             autoSlots.shift();
         }
-        console.log('[AutoSave] 自动存档完成: ' + saveName + '，当前自动存档数: ' + Math.min(autoSlots.length, AUTO_SAVE_MAX));
+        if (typeof workspaceManager !== 'undefined') {
+            workspaceManager.saveCurrentHead({ quiet: true }).catch(function(e) { console.warn('[Workspace] 自动存档后更新 head 失败:', e); });
+        }
+        console.log('[AutoSave] ' + workspaceId + ' 自动存档完成: ' + saveName + '，当前自动存档数: ' + Math.min(autoSlots.length, AUTO_SAVE_MAX));
     } catch(e) {
         console.error('[AutoSave] 自动存档失败:', e);
         showModal('本次回复内容格式不完整，自动存档失败，建议重生成');
@@ -3399,14 +3415,22 @@ function autoSave() {
 
 // ==================== 加载存档弹窗 ====================
 function showLoadModal() {
-    var all = storageService.listSaves();
+    var activeWorkspace = (typeof workspaceManager !== 'undefined') ? workspaceManager.getActiveId() : storageService.getActiveWorkspaceId();
+    var all = storageService.listSaves(activeWorkspace);
     var autoSlots = all.filter(function(s) {
         return s.saveName && s.saveName.indexOf(AUTO_SAVE_PREFIX) === 0;
     }).sort(function(a, b) { return b.createdAt - a.createdAt; }); // 最新在前
+    var workspaceSlots = (typeof workspaceManager !== 'undefined') ? workspaceManager.getSlots() : [];
+    var workspaceGrid = workspaceSlots.map(function(slot) {
+        return '<button class="modal-btn' + (slot.current ? ' active' : '') + '" style="min-height:54px;padding:6px;white-space:normal" onclick="workspaceManager.selectFromSaveModal(\'' + slot.id + '\')"' + (slot.current ? ' disabled' : '') + '>' +
+            _escapeHtml(slot.name) + '<br><small>' + (slot.initialized ? ('自动存档 ' + slot.autoCount + '/3') : '空存档位') + '</small></button>';
+    }).join('');
+    var activeMeta = storageService.loadWorkspaceMeta ? storageService.loadWorkspaceMeta(activeWorkspace) : null;
 
     var html = '<div id="load-modal" class="modal viewport-overlay" style="display:block;">'
-        + '<div class="modal-content" style="max-width:480px;">'
-        + '<h3>自动存档</h3>';
+        + '<div class="modal-content" style="max-width:500px;">'
+        + '<h3>自动存档 · ' + _escapeHtml(activeMeta && activeMeta.name || activeWorkspace) + '</h3>'
+        + '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:10px 0 14px">' + workspaceGrid + '</div>';
 
     if (autoSlots.length === 0) {
         html += '<p style="text-align:center;color:#888;margin:20px 0;">暂无自动存档</p>';
@@ -3476,14 +3500,16 @@ function importSTSaveFromLoadModal() {
         var file = e.target.files[0];
         if (!file) return;
         var reader = new FileReader();
-        reader.onload = function(ev) {
+        reader.onload = async function(ev) {
             var text = ev.target.result;
             if (typeof convertSTJsonl !== 'function') {
+                if (typeof workspaceManager !== 'undefined') workspaceManager.cancelPendingImport();
                 showModal('ST 转换模块未加载，请刷新页面后重试');
                 return;
             }
             var result = convertSTJsonl(text);
             if (!result.success) {
+                if (typeof workspaceManager !== 'undefined') workspaceManager.cancelPendingImport();
                 showModal('转换失败：' + result.error);
                 return;
             }
@@ -3492,6 +3518,7 @@ function importSTSaveFromLoadModal() {
             }
             try {
                 if (window.GameSceneBridge) GameSceneBridge.invalidate('st-import-begin');
+                if (typeof workspaceManager !== 'undefined') workspaceManager.preparePendingImport();
                 var payload = result.payload;
                 // 深拷贝隔断：下面 importSavePayload(payload) 会把这个 payload 存进 _cache[id]，
                 // mergeWithDefaults 不克隆数组字段（如 companionNPC/triggeredEvents），若不先克隆会与该存档槽共享引用
@@ -3555,30 +3582,41 @@ function importSTSaveFromLoadModal() {
                     if (gameData.bgmName) bgmManager.resume(gameData.bgmName);
                     else bgmManager.stop();
                 }
-                // 保存到本地存档槽
-                var id = storageService.importSavePayload(payload);
+                // 保存到当前 Workspace 的本地存档槽
+                var workspaceId = (typeof workspaceManager !== 'undefined') ? workspaceManager.getActiveId() : storageService.getActiveWorkspaceId();
+                var id = storageService.importSavePayload(payload, workspaceId);
                 storageService.saveAppState({ gameData: gameData });
+                if (typeof workspaceManager !== 'undefined') await workspaceManager.afterPayloadApplied();
                 // Phase L2：ST 存档无事件层，导入后从 watermark=0 起补建 L2
                 if (typeof eventRunner !== 'undefined') eventRunner.resumeOnLoad();
                 var warnText = result.warnings && result.warnings.length > 0 ? '\n提示：' + result.warnings.join('；') : '';
                 showModal('ST 存档导入成功！\n存档名：' + result.saveName + warnText);
                 if (window.GameSceneBridge) GameSceneBridge.afterRestore('st-import-complete', false);
             } catch(err) {
+                if (typeof workspaceManager !== 'undefined') workspaceManager.cancelPendingImport();
                 showModal('导入失败：' + err.message);
             }
         };
         reader.readAsText(file, 'utf-8');
     };
+    input.addEventListener('cancel', function() {
+        if (typeof workspaceManager !== 'undefined') workspaceManager.cancelPendingImport();
+    });
     input.click();
 }
 
-function loadSaveSlot(saveId) {
+function loadSaveSlot(saveId, options) {
+    options = options || {};
     // 取消上一个存档可能还在飞行中的 周总结/事件总结/地点更新 请求，避免旧结果在切换存档后写回新存档（“串台”）
     if (typeof summaryRunner !== 'undefined' && summaryRunner.isRunning()) summaryRunner.cancel();
     if (typeof eventRunner !== 'undefined') eventRunner.cancel();
     if (typeof locationRunner !== 'undefined') locationRunner.cancel();
     var payload = storageService.loadSave(saveId);
     if (!payload) { showModal('存档加载失败'); return; }
+    if (payload.workspaceId && storageService.setActiveWorkspaceId) storageService.setActiveWorkspaceId(payload.workspaceId);
+    if (payload.workspaceConfig && typeof promptManagerModal !== 'undefined' && promptManagerModal.applyWorkspaceConfig) {
+        promptManagerModal.applyWorkspaceConfig(payload.workspaceConfig);
+    }
     if (window.GameSceneBridge) GameSceneBridge.invalidate('load-save-begin');
     // 深拷贝隔断：payload === _cache[saveId] 的直接引用，mergeWithDefaults 不克隆数组字段，
     // 不先克隆的话合并后的 gameData 会和这个存档槽缓存对象共享引用，后续原地修改会污染旧存档
@@ -3721,10 +3759,14 @@ function loadSaveSlot(saveId) {
         if (gameData.bgmName) bgmManager.resume(gameData.bgmName);
         else bgmManager.stop();
     }
-    showModal('存档加载成功！');
+    if (!options.silent) showModal('存档加载成功！');
     // 持久化存档恢复后的状态到 localStorage
     storageService.saveAppState({ gameData: gameData });
     if (window.GameSceneBridge) GameSceneBridge.afterRestore('load-save-complete', false);
+    if (!options.skipWorkspaceHead && typeof workspaceManager !== 'undefined' && workspaceManager.afterPayloadApplied) {
+        workspaceManager.afterPayloadApplied().catch(function(e) { console.warn('[Workspace] 读档后更新 head 失败:', e); });
+    }
+    return true;
 }
 
 function deleteSaveSlot(saveId) {
@@ -3735,9 +3777,13 @@ function deleteSaveSlot(saveId) {
     });
 }
 
-function returnToStartScreen() {
-    if (!confirm('确定返回主菜单？未存档的进度将丢失。')) return;
-    location.href = 'start-screen-noST.html';
+async function returnToStartScreen() {
+    if (!confirm('确定返回主菜单？当前存档位会先自动保存。')) return;
+    if (typeof workspaceManager !== 'undefined') {
+        try { await workspaceManager.saveCurrentHead({ quiet: true }); }
+        catch (e) { showModal('存档位保存失败：' + (e && e.message || e)); return; }
+    }
+    location.href = /(?:^|\/)game\.html$/i.test(location.pathname) ? 'index.html' : 'start-screen-noST.html';
 }
 
 // JSON 与 JSONL 共用命名入口；通过 DOM 属性写入名称，避免存档名成为 HTML。
@@ -3817,6 +3863,10 @@ function importSave() {
         }
         try {
             var payload = await storageService.importSaveFromJson(file);
+            if (typeof workspaceManager !== 'undefined') workspaceManager.preparePendingImport(payload);
+            if (payload.workspaceConfig && typeof promptManagerModal !== 'undefined' && promptManagerModal.applyWorkspaceConfig) {
+                promptManagerModal.applyWorkspaceConfig(payload.workspaceConfig);
+            }
             // 深拷贝隔断：即使这里的 payload 是本次新解析出的对象，克隆一层也能保证以后无论
             // 是否有代码把它缓存进 _cache，gameData 的数组字段都不会与其它对象共享引用
             gameData = mergeWithDefaults(structuredClone(payload.gameData), defaultGameData);
@@ -3958,16 +4008,23 @@ function importSave() {
                 else bgmManager.stop();
             }
             showModal('存档导入成功！');
-            // 持久化存档恢复后的状态到 localStorage
+            // 持久化存档恢复后的状态到 localStorage，并归属当前 Workspace。
+            var importedWorkspaceId = (typeof workspaceManager !== 'undefined') ? workspaceManager.getActiveId() : storageService.getActiveWorkspaceId();
+            storageService.importSavePayload(structuredClone(payload), importedWorkspaceId);
             storageService.saveAppState({ gameData: gameData });
+            if (typeof workspaceManager !== 'undefined') await workspaceManager.afterPayloadApplied();
             if (window.GameSceneBridge) GameSceneBridge.afterRestore('json-import-complete', false);
         } catch (e) {
+            if (typeof workspaceManager !== 'undefined') workspaceManager.cancelPendingImport();
             showModal('存档导入失败：' + e.message);
         } finally {
             if (window.GameSceneBridge) GameSceneBridge.setBusy('json-import', false);
         }
         toggleDropdown('history-dropdown');
     };
+    input.addEventListener('cancel', function() {
+        if (typeof workspaceManager !== 'undefined') workspaceManager.cancelPendingImport();
+    });
     input.click();
 }
 
@@ -4654,6 +4711,9 @@ function buildSaveName() {
             }
             if (tabId === 'portrait' && typeof userPortraitManager !== 'undefined') {
                 userPortraitManager.render(document.getElementById('user-portrait-manager-root'));
+            }
+            if (tabId === 'workspace' && typeof workspaceManager !== 'undefined') {
+                workspaceManager.render(document.getElementById('workspace-manager-root'));
             }
         }
 
@@ -5409,6 +5469,12 @@ function buildSaveName() {
                 if (launchIntent === 'loadSave' && loadSaveId) {
                     var savePayload = storageService.loadSave(loadSaveId);
                     if (savePayload && savePayload.gameData) {
+                        if (savePayload.workspaceId && storageService.setActiveWorkspaceId) {
+                            storageService.setActiveWorkspaceId(savePayload.workspaceId);
+                        }
+                        if (savePayload.workspaceConfig && typeof promptManagerModal !== 'undefined' && promptManagerModal.applyWorkspaceConfig) {
+                            promptManagerModal.applyWorkspaceConfig(savePayload.workspaceConfig);
+                        }
                         // 深拷贝隔断：savePayload === _cache[loadSaveId] 的直接引用，理由同 loadSaveSlot()
                         gameData = mergeWithDefaults(structuredClone(savePayload.gameData), defaultGameData);
                         hydrateVariableSystemFromGameData(gameData);
@@ -5492,6 +5558,11 @@ function buildSaveName() {
                         // 持久化存档恢复后的状态到 localStorage
                         storageService.saveAppState({ gameData: gameData });
                     }
+                }
+
+                // Workspace：在目标新游戏/存档完全恢复后绑定当前存档位并写入最新 head。
+                if (typeof workspaceManager !== 'undefined' && workspaceManager.onGameReady) {
+                    await workspaceManager.onGameReady(launchIntent);
                 }
             }
 

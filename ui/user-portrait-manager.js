@@ -33,12 +33,16 @@ var userPortraitManager = (function() {
 
     function _state() {
         if (typeof storageService === 'undefined' || !storageService.loadUserPortraits) {
-            return { version: 1, images: {} };
+            return { version: 2, enabled: false, images: {} };
         }
         var value = storageService.loadUserPortraits();
+        var images = (value && value.images && typeof value.images === 'object') ? value.images : {};
+        var hasImages = Object.keys(images).length > 0;
         return {
-            version: 1,
-            images: (value && value.images && typeof value.images === 'object') ? value.images : {}
+            version: 2,
+            // 旧版已有图片但没有 enabled 字段时保持原有“上传即显示”行为。
+            enabled: hasImages && ((value && typeof value.enabled === 'boolean') ? value.enabled : true),
+            images: images
         };
     }
 
@@ -67,6 +71,31 @@ var userPortraitManager = (function() {
         return Object.keys(_state().images).length > 0;
     }
 
+    function isEnabled() {
+        return !!_state().enabled;
+    }
+
+    function isDisplayEnabled() {
+        var state = _state();
+        return !!state.enabled && Object.keys(state.images).length > 0;
+    }
+
+    async function setEnabled(enabled) {
+        var state = _state();
+        var hasImages = Object.keys(state.images).length > 0;
+        state.enabled = !!enabled && hasImages;
+        try {
+            await _save(state);
+            render(document.getElementById('user-portrait-manager-root'));
+            _notifyChanged();
+            return state.enabled;
+        } catch (error) {
+            render(document.getElementById('user-portrait-manager-root'));
+            if (typeof showModal === 'function') showModal(error && error.message ? error.message : String(error));
+            return false;
+        }
+    }
+
     function getPortraitRecord(emotion) {
         var images = _state().images;
         var keys = Object.keys(images);
@@ -80,6 +109,7 @@ var userPortraitManager = (function() {
     }
 
     function getPortraitUrl(emotion) {
+        if (!isDisplayEnabled()) return null;
         var record = getPortraitRecord(emotion);
         return record && record.dataUrl ? record.dataUrl : null;
     }
@@ -149,6 +179,9 @@ var userPortraitManager = (function() {
     function render(root) {
         if (!root) return;
         var state = _state();
+        var hasImages = Object.keys(state.images).length > 0;
+        var displayEnabled = !!state.enabled && hasImages;
+        var toggleHint = !hasImages ? '请先上传立绘' : (displayEnabled ? '已开启' : '已关闭');
         var options = _expressions().map(function(name) {
             return '<option value="' + _esc(name) + '">' + _esc(name) + '</option>';
         }).join('');
@@ -164,6 +197,11 @@ var userPortraitManager = (function() {
 
         root.innerHTML = '<div class="pm-section">' +
             '<p style="font-size:12px;line-height:1.7;color:#999">为主角上传唯一立绘或各表情差分。缺少某个表情时依次回退到“微笑”→“唯一立绘”→首张可用图片。推荐透明背景 PNG/WebP。</p>' +
+            '<div class="gs-switch-row" style="margin-bottom:10px">' +
+            '<span class="gs-switch-label"><strong>剧情中显示主角立绘</strong><br><small style="color:#999">关闭后，提示词和立绘槽位均只使用 NPC</small></span>' +
+            '<label class="gs-toggle-wrap"><input type="checkbox" ' + (displayEnabled ? 'checked ' : '') + (!hasImages ? 'disabled ' : '') + 'onchange="userPortraitManager.setEnabled(this.checked)">' +
+            '<span class="gs-toggle-track"><span class="gs-toggle-thumb"></span></span><span class="gs-toggle-hint">' + toggleHint + '</span></label>' +
+            '</div>' +
             '<div class="gs-switch-row" style="align-items:flex-end;flex-wrap:wrap;gap:8px">' +
             '<label style="flex:1 1 130px"><span class="gs-switch-label" style="display:block;margin-bottom:4px">立绘类型</span><select id="user-portrait-expression" class="cfg-input">' + options + '</select></label>' +
             '<label style="flex:2 1 210px"><span class="gs-switch-label" style="display:block;margin-bottom:4px">选择图片</span><input id="user-portrait-file" type="file" accept="image/png,image/jpeg,image/webp" class="cfg-input"></label>' +
@@ -186,7 +224,8 @@ var userPortraitManager = (function() {
         try {
             var encoded = await _processFile(file);
             var state = _state();
-            state = { version: 1, images: Object.assign({}, state.images) };
+            var hadImages = Object.keys(state.images).length > 0;
+            state = { version: 2, enabled: hadImages ? !!state.enabled : true, images: Object.assign({}, state.images) };
             state.images[expression] = {
                 dataUrl: encoded.dataUrl,
                 fileName: file.name || '',
@@ -210,7 +249,7 @@ var userPortraitManager = (function() {
                 var state = _state();
                 var images = Object.assign({}, state.images);
                 delete images[expression];
-                await _save({ version: 1, images: images });
+                await _save({ version: 2, enabled: !!state.enabled && Object.keys(images).length > 0, images: images });
                 render(document.getElementById('user-portrait-manager-root'));
                 _notifyChanged();
             } catch (error) {
@@ -229,6 +268,9 @@ var userPortraitManager = (function() {
         uploadSelected: uploadSelected,
         remove: remove,
         hasPortrait: hasPortrait,
+        isEnabled: isEnabled,
+        isDisplayEnabled: isDisplayEnabled,
+        setEnabled: setEnabled,
         isUserToken: isUserToken,
         getPortraitRecord: getPortraitRecord,
         getPortraitUrl: getPortraitUrl,

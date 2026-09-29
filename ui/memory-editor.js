@@ -1,4 +1,4 @@
-/**
+﻿/**
  * memory-editor.js - 记忆编辑器（手动修正记忆内容）
  * 2026-08-15 新增
  *
@@ -87,30 +87,28 @@ var memoryEditor = (function() {
         var overlay = document.createElement('div');
         overlay.id = 'memory-editor-overlay';
         overlay.className = 'modal viewport-overlay';
-        overlay.style.display = 'block';
-        overlay.style.zIndex = '100001';
-        overlay.style.overflowY = 'auto';
+        overlay.dataset.selfManagedViewport = 'true';
+        overlay.style.cssText = 'display:flex;align-items:center;justify-content:center;position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;overflow:hidden;box-sizing:border-box;padding:max(10px,env(safe-area-inset-top,0px)) max(10px,env(safe-area-inset-right,0px)) max(10px,env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px));z-index:100001;';
         overlay.innerHTML =
-            '<div class="modal-content" style="max-width:700px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">'
-            + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
-            + '<h3 style="margin:0;font-size:16px;"><span class="memory-editor-title-text" style="color:#1f1f1f;-webkit-text-stroke:1px rgba(255,255,255,.96);paint-order:stroke fill;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff;">记忆编辑</span> <span style="font-size:12px;color:#888;font-weight:normal;-webkit-text-stroke:0;text-shadow:none;">（修改内容保存后，向量下一轮自动重建）</span></h3>'
+            '<style>@media (orientation:landscape) and (max-height:300px){#memory-editor-overlay .memory-editor-footer{display:none!important}#memory-editor-overlay .modal-content{border-width:8px!important;border-image-width:10px!important;padding:6px!important}#memory-editor-overlay .memory-editor-header,#memory-editor-overlay .memory-editor-tabs{margin-bottom:4px!important}#memory-editor-overlay .memory-editor-subtitle{display:none!important}#memory-editor-overlay .memory-editor-tabs .modal-btn{min-height:32px!important;padding:3px 8px!important;font-size:12px!important}}</style>'
+            + '<style>.memory-editor-heading{min-width:0!important}#memory-editor-overlay .memory-editor-header .memory-editor-heading>h3{display:inline-block!important;align-self:flex-start!important;width:max-content!important;max-width:100%!important;background-color:var(--paper-base,#f4f0e6)!important;background-image:url("assets/image/static/水墨笔触2.png")!important;background-size:contain!important;background-position:left center!important;background-repeat:no-repeat!important;background-blend-mode:multiply!important;color:var(--paper-base,#f4f0e6)!important;border:0!important;padding:6px 10px!important;margin:0 0 8px!important;transform:rotate(-1.6deg)!important;font-family:var(--font-serif,"Kaiti",serif)!important;font-size:20px!important;line-height:1.35!important;letter-spacing:.04em!important;-webkit-text-stroke:1.5px var(--ink-black,#1a1a1a)!important;paint-order:stroke fill!important;text-shadow:0 0 1px rgba(0,0,0,.5)!important;white-space:nowrap!important}.memory-editor-heading>.memory-editor-subtitle{display:block!important;padding-left:0!important;font-size:12px!important;line-height:1.45!important;color:#888!important;font-weight:normal!important;-webkit-text-stroke:0!important;text-shadow:none!important;letter-spacing:0!important}body.ui-style-flat #memory-editor-overlay .memory-editor-header .memory-editor-heading>h3{background:none!important;color:var(--f-text,#e8ecf5)!important;border-bottom:2px solid var(--f-accent,#4ecdc4)!important;transform:none!important;-webkit-text-stroke:0!important;text-shadow:none!important}@media (orientation:landscape) and (max-height:600px){#memory-editor-overlay .memory-editor-header .memory-editor-heading>h3{padding:3px 8px!important;margin-bottom:4px!important;font-size:18px!important}}</style>'
+            + '<div class="modal-content" style="position:relative!important;left:auto!important;top:auto!important;transform:none!important;width:min(94vw,760px)!important;height:min(calc(100vh - 20px),920px)!important;height:min(calc(100dvh - 20px),920px)!important;max-width:760px!important;max-height:none!important;margin:0;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;">'
+            + '<div class="memory-editor-header" style="display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:10px;margin-bottom:10px;flex-shrink:0;">'
+            + '<div class="memory-editor-heading"><h3>记忆编辑</h3><span class="memory-editor-subtitle">修改内容保存后，向量将在下一轮自动重建</span></div>'
             + '<button class="modal-btn cancel" style="padding:4px 12px;font-size:13px;flex-shrink:0;" onclick="memoryEditor.close()" title="关闭（退出编辑）">✕ 退出</button>'
             + '</div>'
-            + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;flex-shrink:0;">'
+            + '<div class="memory-editor-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;flex-shrink:0;">'
             + _tabBtn('summary', '碎片日记')
             + _tabBtn('events', '剧情事件')
             + _tabBtn('meta', '事实/弧光')
             + _tabBtn('week', '每周总结')
             + '</div>'
-            + '<div id="memory-editor-body" style="flex:1;min-height:0;overflow-y:auto;min-height:200px;"></div>'
-            + '<div class="modal-buttons" style="margin-top:10px;flex-shrink:0;">'
+            + '<div id="memory-editor-body" style="flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;"></div>'
+            + '<div class="modal-buttons memory-editor-footer" style="margin-top:10px;flex-shrink:0;">'
             + '<button class="modal-btn cancel" onclick="memoryEditor.close()">关闭</button>'
             + '</div>'
             + '</div>';
         document.body.appendChild(overlay);
-        try {
-            if (typeof fitModalToViewport === 'function') fitModalToViewport(overlay);
-        } catch (e) {}
         render();
     }
 

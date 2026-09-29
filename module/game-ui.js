@@ -51,8 +51,8 @@ let tianshanPortraitData = [];
 
 /**
  * 解析天山派普通模式中的单行立绘元数据。
- * NPC 与表情字段均允许用“、”并列 1～3 项，且按相同下标一一对应；
- * 只有本段实际发言者才进入 speakers，所以下一页未再次列出的角色会立即退场。
+ * 角色与表情字段均允许用“、”并列 1～3 项，且按相同下标一一对应；
+ * 本段实际参与互动的角色进入 speakers，下一页未再次列出的角色会立即退场。
  */
 function parseTianshanPortraitLine(rawLine) {
     const line = String(rawLine || '');
@@ -93,16 +93,32 @@ function parseTianshanPortraitLine(rawLine) {
     const npcItems = splitList(parts[1]);
     const emotionItems = splitList(parts[3]);
     const seenNpc = {};
-    for (let i = 0; i < npcItems.length && result.speakers.length < 3; i++) {
+    const normalizedNpcs = [];
+    for (let i = 0; i < npcItems.length && normalizedNpcs.length < 3; i++) {
         const npcName = normalizeNpc(npcItems[i]);
         if (npcName === 'none' || seenNpc[npcName]) continue;
         if (npcName !== 'user' && (typeof npcNameToId === 'undefined' || !npcNameToId[npcName])) continue;
         seenNpc[npcName] = true;
-        result.speakers.push({
-            npc: npcName,
-            emotion: normalizeEmotion(emotionItems[i] || 'none')
-        });
+        normalizedNpcs.push(npcName);
     }
+
+    const normalizedEmotions = emotionItems.map(normalizeEmotion);
+    const nonUserCount = normalizedNpcs.filter(name => name !== 'user').length;
+    // 兼容旧存档影响下部分模型产生的“user、NPC|单个NPC表情”：
+    // 当表情数恰好等于非 user 角色数时，将 user 补 none，表情优先按顺序分配给 NPC。
+    const npcPriorityRepair = normalizedNpcs.includes('user')
+        && normalizedEmotions.length !== normalizedNpcs.length
+        && normalizedEmotions.length === nonUserCount;
+    if (normalizedEmotions.length !== normalizedNpcs.length) {
+        console.warn('[天山派立绘] 角色/表情数量不一致，已执行兼容补齐:', normalizedNpcs, normalizedEmotions);
+    }
+    let npcEmotionIndex = 0;
+    normalizedNpcs.forEach((npcName, index) => {
+        const emotion = npcPriorityRepair
+            ? (npcName === 'user' ? 'none' : (normalizedEmotions[npcEmotionIndex++] || 'none'))
+            : (normalizedEmotions[index] || 'none');
+        result.speakers.push({ npc: npcName, emotion: emotion });
+    });
 
     // 保留首位人物字段，兼容已使用旧单人接口的代码与调试脚本。
     if (result.speakers.length > 0) {
@@ -115,7 +131,7 @@ function parseTianshanPortraitLine(rawLine) {
 /**
  * 读取天山派当前故事页的动态同屏人物。
  * active=false 表示尚未收到带分页元数据的正文，此时继续显示场景原有 NPC；
- * 每一页只使用该页 speakers，未发言角色不会继承到下一页，人数硬上限为三人。
+ * 每一页只使用该页 speakers，未继续参与的角色不会继承到下一页，人数硬上限为三人。
  */
 function getTianshanCurrentPortraitState() {
     const inactive = { active: false, scene: 'none', speakers: [], npc: 'none', emotion: 'none', pageIndex: -1 };
@@ -206,6 +222,22 @@ function parseSlgMainText(mainText) {
         if (npcs[normalizedNpc]?.name && pool.has(npcs[normalizedNpc].name)) return true;
         return false;
     };
+
+    // 主角立绘关闭时兼容旧存档的 user 标记：正文只明确提及一名随行NPC时，改用该NPC。
+    const findSingleMentionedCompanion = (text) => {
+        const hits = [];
+        const seen = {};
+        (companionNPC || []).forEach(item => {
+            let name = '';
+            if (typeof item === 'string' && npcNameToId[item]) name = item;
+            else if (typeof item === 'string' && typeof npcs !== 'undefined' && npcs[item]?.name) name = npcs[item].name;
+            else if (item && typeof item === 'object') name = item.name || (item.id && npcs[item.id]?.name) || '';
+            if (!name || seen[name] || !String(text || '').includes(name)) return;
+            seen[name] = true;
+            hits.push(name);
+        });
+        return hits.length === 1 ? hits[0] : null;
+    };
     
     // 检查场景是否有效（标准化后的场景必须不为none）
     const isSceneAllowed = (normalizedScene) => normalizedScene !== 'none' || normalizedScene === 'none';
@@ -236,10 +268,19 @@ function parseSlgMainText(mainText) {
         const cgRaw = normalizeNone(parts[4]);
 
         // 使用模糊匹配获取标准化的值
-        const normalizedNpc = getNormalizedNpc(npcRaw);
+        let normalizedNpc = getNormalizedNpc(npcRaw);
         const normalizedScene = getNormalizedScene(sceneRaw);
         const normalizedEmotion = getNormalizedEmotion(emotionRaw);
         const normalizedCG = getNormalizedCG(cgRaw);
+
+        const userPortraitVisible = typeof userPortraitManager !== 'undefined'
+            && userPortraitManager.isDisplayEnabled && userPortraitManager.isDisplayEnabled();
+        if (normalizedNpc === 'user' && !userPortraitVisible) {
+            const paragraphText = currentTextBlock.concat(textPart ? [textPart] : []).join('\n\n');
+            const repairedNpc = findSingleMentionedCompanion(paragraphText);
+            normalizedNpc = repairedNpc || 'none';
+            console.warn('[SLG立绘] 主角立绘关闭，旧user标记已兼容为:', normalizedNpc);
+        }
 
         // 验证各字段
         const npcOk = isNpcAllowed(normalizedNpc);
@@ -826,7 +867,8 @@ function _appendSlgLayers(viewport, pageData) {
 
             // 2) NPC表情图层
             if (pageData.npc && pageData.npc !== 'none'
-                && (pageData.npc !== 'user' || (typeof userPortraitManager !== 'undefined' && userPortraitManager.hasPortrait()))) {
+                && (pageData.npc !== 'user' || (typeof userPortraitManager !== 'undefined'
+                    && userPortraitManager.isDisplayEnabled && userPortraitManager.isDisplayEnabled()))) {
                 const isUserPortrait = pageData.npc === 'user';
                 const npcId = isUserPortrait ? userPortraitManager.USER_ID : npcNameToId[pageData.npc];
                 if (npcId) {
@@ -1113,6 +1155,8 @@ function updateSLGReturnButton() {
 }
 
 function fitModalToViewport(modal) {
+    // 记忆编辑器、Workspace 空槽等自管理全屏弹窗不应在软键盘 resize 时被重新压回主视窗。
+    if (modal && modal.dataset && modal.dataset.selfManagedViewport === 'true') return;
     const vp = document.getElementById('main-viewport');
     if (!vp) return;
 

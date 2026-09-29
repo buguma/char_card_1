@@ -29,14 +29,17 @@ var storageService = (function() {
     // L-地点 记忆层（地点信息迭代，仿 L2 事件层的独立 key 模式）
     var KEY_LOCATION_MEMORY = 'locationMemory';
     var KEY_LOCATION_BUFF = 'locationBuff';
-    // 提示词管理：全局配置（不随存档走，所有存档共用一份），结构 { [promptKey]: string }
+    // 提示词管理：当前 Workspace 活跃配置，结构 { [promptKey]: string }
     var KEY_PROMPT_OVERRIDES = 'promptOverrides';
-    // 自定义世界书：全局配置（不随存档走），结构 [{id,name,keywords,content,enabled}]，数组顺序即插入顺序
+    // 自定义世界书：当前 Workspace 活跃配置，结构 [{id,name,keywords,content,enabled}]，数组顺序即插入顺序
     // 两个独立的分类/插入位置：1=主角信息后/] 之前，2=</fresh>与<user_input>之间
     var KEY_CUSTOM_WORLDBOOK = 'customWorldbook';
     var KEY_CUSTOM_WORLDBOOK_2 = 'customWorldbook2';
     // 玩家自定义主角立绘：全局配置，不随单个存档切换；图片数据优先保存在 IndexedDB。
     var KEY_USER_PORTRAITS = 'userPortraits';
+    // 四个 Workspace 工作区：meta 与 head 分开保存，head 为完整存档 payload。
+    var KEY_WORKSPACE_META_PREFIX = 'workspace_meta_';
+    var KEY_WORKSPACE_HEAD_PREFIX = 'workspace_head_';
 
     // localStorage key（兼容旧格式）
     var LS_APP_STATE = 'jxz_appState';
@@ -56,6 +59,7 @@ var storageService = (function() {
     var LS_CUSTOM_WORLDBOOK = 'jxz_customWorldbook';
     var LS_CUSTOM_WORLDBOOK_2 = 'jxz_customWorldbook2';
     var LS_USER_PORTRAITS = 'jxz_userPortraits';
+    var LS_ACTIVE_WORKSPACE = 'jxz_activeWorkspace';
 
     // localStorage key（快照降级，仅存体积可控的字段）
     var LS_SNAPSHOT_APPSTATE = 'jxz_snapshot';
@@ -678,15 +682,18 @@ var storageService = (function() {
     // --- 玩家自定义主角立绘（全局配置，不随存档走）---
     function loadUserPortraits() {
         var value = _cache[KEY_USER_PORTRAITS];
-        if (!value || typeof value !== 'object') return { version: 1, images: {} };
+        if (!value || typeof value !== 'object') return { version: 2, enabled: false, images: {} };
         return value;
     }
 
     async function saveUserPortraits(data) {
         var source = (data && typeof data === 'object') ? data : {};
         var images = (source.images && typeof source.images === 'object') ? source.images : {};
+        var hasImages = Object.keys(images).length > 0;
+        var enabled = (typeof source.enabled === 'boolean') ? source.enabled : hasImages;
         var value = {
-            version: 1,
+            version: 2,
+            enabled: !!enabled && hasImages,
             images: (typeof structuredClone === 'function') ? structuredClone(images) : JSON.parse(JSON.stringify(images))
         };
         _cache[KEY_USER_PORTRAITS] = value;
@@ -706,6 +713,96 @@ var storageService = (function() {
         } catch (fallbackError) {
             throw new Error('主角立绘持久化失败：' + (fallbackError && fallbackError.message || fallbackError));
         }
+    }
+
+    // --- Workspace 游戏工作区（四个存档位）---
+    var WORKSPACE_IDS = ['custom1', 'custom2', 'custom3', 'custom4'];
+
+    function normalizeWorkspaceId(id) {
+        return WORKSPACE_IDS.indexOf(id) !== -1 ? id : 'custom1';
+    }
+
+    function getActiveWorkspaceId() {
+        return normalizeWorkspaceId(_lsGet(LS_ACTIVE_WORKSPACE) || localStorage.getItem(LS_ACTIVE_WORKSPACE) || 'custom1');
+    }
+
+    function setActiveWorkspaceId(id) {
+        id = normalizeWorkspaceId(id);
+        try {
+            localStorage.setItem(LS_ACTIVE_WORKSPACE, id);
+            localStorage.setItem('jxz_presetMode', id); // 兼容旧四槽配置键
+        } catch (e) {}
+        return id;
+    }
+
+    function loadWorkspaceMeta(id) {
+        id = normalizeWorkspaceId(id);
+        return _cache[KEY_WORKSPACE_META_PREFIX + id] || null;
+    }
+
+    async function saveWorkspaceMeta(id, meta) {
+        id = normalizeWorkspaceId(id);
+        var value = structuredClone(meta || {});
+        value.id = id;
+        value.updatedAt = value.updatedAt || Date.now();
+        _cache[KEY_WORKSPACE_META_PREFIX + id] = value;
+        if (!_idbAvailable) throw new Error('Workspace 需要 IndexedDB 支持');
+        await idbStorage.put(KEY_WORKSPACE_META_PREFIX + id, value);
+        return value;
+    }
+
+    function loadWorkspaceHead(id) {
+        id = normalizeWorkspaceId(id);
+        return _cache[KEY_WORKSPACE_HEAD_PREFIX + id] || null;
+    }
+
+    async function saveWorkspaceHead(id, payload) {
+        id = normalizeWorkspaceId(id);
+        var value = structuredClone(payload || {});
+        value.id = KEY_WORKSPACE_HEAD_PREFIX + id;
+        value.workspaceId = id;
+        value.isWorkspaceHead = true;
+        value.updatedAt = Date.now();
+        _cache[value.id] = value;
+        if (!_idbAvailable) throw new Error('Workspace 需要 IndexedDB 支持');
+        await idbStorage.put(value.id, value);
+        return value;
+    }
+
+    async function clearWorkspace(id) {
+        id = normalizeWorkspaceId(id);
+        var metaKey = KEY_WORKSPACE_META_PREFIX + id;
+        var headKey = KEY_WORKSPACE_HEAD_PREFIX + id;
+        delete _cache[metaKey];
+        delete _cache[headKey];
+        if (_idbAvailable) {
+            await Promise.all([idbStorage.remove(metaKey), idbStorage.remove(headKey)]);
+        }
+    }
+
+    function listWorkspaceMetas() {
+        return WORKSPACE_IDS.map(function(id) {
+            return loadWorkspaceMeta(id) || { id: id, name: '存档位 ' + (WORKSPACE_IDS.indexOf(id) + 1), initialized: false };
+        });
+    }
+
+    function assignLegacySavesToWorkspace(id) {
+        id = normalizeWorkspaceId(id);
+        var index = _getSaveIndex();
+        var changed = false;
+        for (var i = 0; i < index.length; i++) {
+            if (!index[i].workspaceId) {
+                index[i].workspaceId = id;
+                var payload = _cache[index[i].id];
+                if (payload) {
+                    payload.workspaceId = id;
+                    _idbPut(index[i].id, payload);
+                }
+                changed = true;
+            }
+        }
+        if (changed) _setSaveIndex(index);
+        return changed;
     }
 
     // --- 全量快照（snapshot_db）---
@@ -1007,8 +1104,11 @@ var storageService = (function() {
         _lsSet(LS_SAVES + '_index', index);
     }
 
-    function listSaves() {
-        return _getSaveIndex();
+    function listSaves(workspaceId) {
+        var index = _getSaveIndex();
+        if (!workspaceId) return index;
+        var id = normalizeWorkspaceId(workspaceId);
+        return index.filter(function(item) { return normalizeWorkspaceId(item.workspaceId) === id; });
     }
 
     // 序列化 L2 事件向量（Float32Array → number[]，供存档导出）
@@ -1046,37 +1146,15 @@ var storageService = (function() {
         }
     }
 
-    function createSave(saveName) {
-        var id = 'save_' + Date.now();
-        // Phase 3：序列化 embeddings（Float32Array → number[]）
-        var embRecords = loadAllEmbeddings();
-        var embExport = embRecords.map(function(r) {
-            var vec = r.vector;
-            var arr = (vec instanceof Float32Array) ? Array.from(vec) : (Array.isArray(vec) ? vec : []);
-            return { id: r.id, vector: arr, text: r.text || '', week: r.week || 0, fingerprint: r.fingerprint || '', createdAt: r.createdAt || 0 };
-        });
-        var l2Export = _serializeL2Embeddings();
-        var payload = {
-            id: id,
-            saveName: saveName,
-            gameData: (typeof gameData !== 'undefined') ? structuredClone(gameData) : null,
-            summaryHistory: (typeof summaryHistoryService !== 'undefined') ? structuredClone(summaryHistoryService.getAll()) : [],
-            weekHistory: (typeof weekHistoryService !== 'undefined') ? structuredClone(weekHistoryService.getAll()) : [],
-            markWeekUiIndex: getMarkWeekUiIndex(),
-            summaryBuff: structuredClone(getSummaryBuffQueue()),
-            uiConversation: structuredClone(loadUIConversation()),
-            embeddings: embExport,
-            eventHistory: structuredClone(loadEventHistory()),
-            eventMeta: structuredClone(loadEventMeta()),
-            eventWatermark: loadEventWatermark(),
-            eventStep: loadEventStep(),
-            l2Embeddings: l2Export,
-            locationMemory: structuredClone(loadLocationMemory()),
-            locationBuff: structuredClone(loadLocationBuffQueue()),
-            previewWeek: (typeof gameData !== 'undefined' && gameData) ? gameData.currentWeek : null,
-            previewLocation: (typeof gameData !== 'undefined' && gameData) ? gameData.mapLocation : null,
-            createdAt: Date.now()
-        };
+    function createSave(saveName, workspaceId) {
+        var id = 'save_' + Date.now() + '_' + Math.floor(Math.random() * 1000000);
+        var owner = normalizeWorkspaceId(workspaceId || getActiveWorkspaceId());
+        var payload = buildSavePayload(saveName, true);
+        payload.id = id;
+        payload.workspaceId = owner;
+        payload.previewWeek = (typeof gameData !== 'undefined' && gameData) ? gameData.currentWeek : null;
+        payload.previewLocation = (typeof gameData !== 'undefined' && gameData) ? gameData.mapLocation : null;
+        payload.createdAt = Date.now();
 
         // 写入独立 key
         _cache[id] = payload;
@@ -1089,7 +1167,8 @@ var storageService = (function() {
             saveName: saveName,
             previewWeek: payload.previewWeek,
             previewLocation: payload.previewLocation,
-            createdAt: payload.createdAt
+            createdAt: payload.createdAt,
+            workspaceId: owner
         });
         _setSaveIndex(index);
 
@@ -1125,9 +1204,11 @@ var storageService = (function() {
     }
 
     /** 导入完整存档 payload（从 JSON 文件导入时使用） */
-    function importSavePayload(payload) {
-        var id = 'save_' + Date.now();
+    function importSavePayload(payload, workspaceId) {
+        var id = 'save_' + Date.now() + '_' + Math.floor(Math.random() * 1000000);
+        var owner = normalizeWorkspaceId(workspaceId || getActiveWorkspaceId());
         payload.id = id;
+        payload.workspaceId = owner;
         if (!payload.createdAt) payload.createdAt = Date.now();
 
         // 写入独立 key
@@ -1141,7 +1222,8 @@ var storageService = (function() {
             saveName: payload.saveName || '导入存档',
             previewWeek: payload.gameData && payload.gameData.currentWeek,
             previewLocation: payload.gameData && payload.gameData.mapLocation,
-            createdAt: payload.createdAt
+            createdAt: payload.createdAt,
+            workspaceId: owner
         });
         _setSaveIndex(index);
         _syncSavesToLocalStorage();
@@ -1233,8 +1315,17 @@ var storageService = (function() {
                 };
             });
         }
+        var activeWorkspaceId = getActiveWorkspaceId();
+        var activeWorkspaceMeta = loadWorkspaceMeta(activeWorkspaceId);
         return {
             saveName: saveName,
+            workspaceId: activeWorkspaceId,
+            workspaceName: activeWorkspaceMeta && activeWorkspaceMeta.name || '',
+            workspaceConfig: {
+                overrides: structuredClone(loadPromptOverrides() || {}),
+                wb1: structuredClone(loadCustomWorldbook('1') || []),
+                wb2: structuredClone(loadCustomWorldbook('2') || [])
+            },
             gameData: (typeof gameData !== 'undefined') ? gameData : null,
             summaryHistory: (typeof summaryHistoryService !== 'undefined') ? summaryHistoryService.getAll() : [],
             weekHistory: (typeof weekHistoryService !== 'undefined') ? weekHistoryService.getAll() : [],
@@ -1437,6 +1528,17 @@ var storageService = (function() {
         saveCustomWorldbook: saveCustomWorldbook,
         loadUserPortraits: loadUserPortraits,
         saveUserPortraits: saveUserPortraits,
+        workspaceIds: WORKSPACE_IDS.slice(),
+        normalizeWorkspaceId: normalizeWorkspaceId,
+        getActiveWorkspaceId: getActiveWorkspaceId,
+        setActiveWorkspaceId: setActiveWorkspaceId,
+        loadWorkspaceMeta: loadWorkspaceMeta,
+        saveWorkspaceMeta: saveWorkspaceMeta,
+        loadWorkspaceHead: loadWorkspaceHead,
+        saveWorkspaceHead: saveWorkspaceHead,
+        clearWorkspace: clearWorkspace,
+        listWorkspaceMetas: listWorkspaceMetas,
+        assignLegacySavesToWorkspace: assignLegacySavesToWorkspace,
         restoreL2FromPayload: _restoreL2FromPayload,
         serializeL2Embeddings: _serializeL2Embeddings,
         buildSavePayload: buildSavePayload,

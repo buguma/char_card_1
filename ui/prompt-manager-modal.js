@@ -92,7 +92,7 @@ var promptManagerModal = (function() {
     }
 
     function _emptyPresetSnapshot() {
-        return { overrides: {}, locMemory: {}, wb1: [], wb2: [] };
+        return { overrides: {}, wb1: [], wb2: [] };
     }
 
     function _snapshotCustom() {
@@ -103,12 +103,6 @@ var promptManagerModal = (function() {
             try { snap.overrides = JSON.parse(JSON.stringify(storageService.loadPromptOverrides() || {})); } catch(e2) { snap.overrides = {}; }
         }
         if (!snap.overrides) snap.overrides = {};
-
-        try { snap.locMemory = JSON.parse(localStorage.getItem('jxz_locationMemory') || 'null'); } catch(e) { snap.locMemory = null; }
-        if (!snap.locMemory && typeof storageService !== 'undefined') {
-            try { snap.locMemory = JSON.parse(JSON.stringify(storageService.loadLocationMemory() || {})); } catch(e2) { snap.locMemory = {}; }
-        }
-        if (!snap.locMemory) snap.locMemory = {};
 
         try { snap.wb1 = JSON.parse(localStorage.getItem('jxz_customWorldbook') || 'null'); } catch(e) { snap.wb1 = null; }
         if (!snap.wb1 && typeof storageService !== 'undefined') {
@@ -134,12 +128,10 @@ var promptManagerModal = (function() {
 
         // 写 localStorage
         localStorage.setItem('jxz_promptOverrides', JSON.stringify(copy.overrides || {}));
-        localStorage.setItem('jxz_locationMemory', JSON.stringify(copy.locMemory || {}));
         localStorage.setItem('jxz_customWorldbook', JSON.stringify(copy.wb1 || []));
         localStorage.setItem('jxz_customWorldbook2', JSON.stringify(copy.wb2 || []));
         // 同步 storageService 缓存
         if (typeof storageService !== 'undefined') {
-            storageService.saveLocationMemory(copy.locMemory || {});
             storageService.saveCustomWorldbook('1', copy.wb1 || []);
             storageService.saveCustomWorldbook('2', copy.wb2 || []);
             // 批量恢复 promptOverrides
@@ -157,12 +149,10 @@ var promptManagerModal = (function() {
     function _clearAllCustom() {
         // 清 localStorage
         localStorage.removeItem('jxz_promptOverrides');
-        localStorage.removeItem('jxz_locationMemory');
         localStorage.removeItem('jxz_customWorldbook');
         localStorage.removeItem('jxz_customWorldbook2');
         // 同步 storageService 缓存
         if (typeof storageService !== 'undefined') {
-            storageService.saveLocationMemory({});
             storageService.saveCustomWorldbook('1', []);
             storageService.saveCustomWorldbook('2', []);
             // 批量清空 promptOverrides
@@ -296,7 +286,6 @@ var promptManagerModal = (function() {
 
         var html = '';
         html += '<style>.pm-section > .gs-switch-row:last-child { border-bottom: none; }</style>';
-        html += _presetBar();
         // html += '<p class="cfg-hint">以下内容按实际发送给 LLM 的拼装顺序列出。"可调"条目点开后可编辑并保存，保存为全局配置（不随存档走，所有存档共用）；"只读"条目仅供查看。</p>';
 
         // 分组1：PROMPT头部
@@ -1174,6 +1163,10 @@ var promptManagerModal = (function() {
         _openPresetNameEditor: _openPresetNameEditor,
         _closePresetNameEditor: _closePresetNameEditor,
         _savePresetNames: _savePresetNames,
+        captureWorkspaceConfig: _snapshotCustom,
+        applyWorkspaceConfig: _restoreCustom,
+        emptyWorkspaceConfig: _emptyPresetSnapshot,
+        refresh: _refreshRoot,
         _wbMoveUp: _wbMoveUp,
         _wbMoveDown: _wbMoveDown,
         _onWbToggle: _onWbToggle,
